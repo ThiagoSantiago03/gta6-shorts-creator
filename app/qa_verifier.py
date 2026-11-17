@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import get_ffmpeg_exe
 from app.models import MusicStoryProject, WordTiming
+from app.rights import media_allowed
 
 logger = logging.getLogger("gta6_qa")
 
@@ -907,17 +908,12 @@ def run_project_qa(
         if risk_lvl == "alto":
             high_risk_media += 1
 
-        # M-01 Gate de Direitos
-        if publish_intent == "commercial":
-            if not comm_allowed or auth_status in ("unknown", "restricted", "review_required", "non_commercial_only"):
-                blocking_reasons.append(
-                    f"Mídia '{fn}' ({role}) bloqueada para uso comercial (status: {auth_status}, licença: {lic})."
-                )
-        elif publish_intent == "editorial":
-            if auth_status in ("unknown", "restricted"):
-                blocking_reasons.append(
-                    f"Mídia '{fn}' ({role}) desconhecida/restrita bloqueada para publicação."
-                )
+        # M-01 / T5 Gate único de Direitos
+        allowed, reason = media_allowed(med, publish_intent)
+        if not allowed:
+            blocking_reasons.append(
+                f"Mídia '{fn}' ({role}) bloqueada para finalidade '{publish_intent}': {reason} (licença: {lic})."
+            )
 
     is_blocked = len(blocking_reasons) > 0
     media_status = "blocked" if is_blocked else ("warning" if media_warnings else "ok")

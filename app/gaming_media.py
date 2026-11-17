@@ -22,6 +22,7 @@ from app.audio_processor import find_best_highlight_start, get_audio_duration
 from app.config import GTA6_INPUTS_DIR, INPUTS_DIR, PROJECTS_DIR, get_ffmpeg_exe
 from app.gaming_radar import fetch_article_context_and_images, translate_to_en
 from app.models import MusicStoryProject, SceneItem
+from app.rights import media_allowed
 from app.visual_assets import (
     WIKI_HEADERS,
     _query_commons_images,
@@ -909,17 +910,22 @@ def _collect_interleaved_cuts(project: MusicStoryProject, max_clips_per_video: i
         return []
 
     publish_intent = getattr(project, "publish_intent", "commercial") or "commercial"
-    if publish_intent == "commercial":
-        filtered_attached: list[Path] = []
-        for p in attached:
-            entry = get_media_catalog_entry(p.name)
-            if entry and (not entry.get("commercial_use_allowed", False) or entry.get("authorization_status") in ("unknown", "restricted", "review_required", "non_commercial_only")):
-                logger.warning("Clipe anexado '%s' rejeitado para projeto commercial por licença.", p.name)
-                continue
-            filtered_attached.append(p)
-        attached = filtered_attached
-        if not attached:
-            return []
+    filtered_attached: list[Path] = []
+    for p in attached:
+        entry = get_media_catalog_entry(p.name)
+        allowed, reason = media_allowed(entry, publish_intent)
+        if not allowed:
+            logger.warning(
+                "Clipe anexado '%s' rejeitado para finalidade '%s': %s.",
+                p.name,
+                publish_intent,
+                reason,
+            )
+            continue
+        filtered_attached.append(p)
+    attached = filtered_attached
+    if not attached:
+        return []
 
     per_file_cuts: list[list[dict[str, Any]]] = []
     for vp in attached[:6]:
@@ -982,11 +988,16 @@ def _collect_library_trailer_cuts(project: MusicStoryProject, max_clips_per_vide
     for p in sorted(GTA6_INPUTS_DIR.iterdir()):
         if not p.is_file() or p.suffix.lower() not in VIDEO_EXTS:
             continue
-        if publish_intent == "commercial":
-            entry = get_media_catalog_entry(p.name)
-            if not entry or not entry.get("commercial_use_allowed", False) or entry.get("authorization_status") in ("unknown", "restricted", "review_required", "non_commercial_only"):
-                logger.info("Omitindo clipe de biblioteca '%s' em projeto comercial (licença não comercial).", p.name)
-                continue
+        entry = get_media_catalog_entry(p.name)
+        allowed, reason = media_allowed(entry, publish_intent)
+        if not allowed:
+            logger.info(
+                "Omitindo clipe de biblioteca '%s' para finalidade '%s' (%s).",
+                p.name,
+                publish_intent,
+                reason,
+            )
+            continue
         cuts = index_trailer_scenes(p, max_clips=max_clips_per_video)
         if not cuts:
             continue
@@ -1624,16 +1635,26 @@ def auto_select_gaming_soundtrack(
         pool = filtered
 
     publish_intent = getattr(project, "publish_intent", "commercial") or "commercial"
-    if publish_intent == "commercial":
-        comm_pool = []
-        for track in pool:
-            entry = get_media_catalog_entry(track.name)
-            if entry and entry.get("commercial_use_allowed", False) and entry.get("authorization_status") not in ("unknown", "restricted", "review_required", "non_commercial_only"):
-                comm_pool.append(track)
-        if comm_pool:
-            pool = comm_pool
+    allowed_pool: list[Path] = []
+    for track in pool:
+        entry = get_media_catalog_entry(track.name)
+        allowed, reason = media_allowed(entry, publish_intent)
+        if allowed:
+            allowed_pool.append(track)
         else:
-            logger.warning("Nenhuma trilha sonora com licença comercial verificada encontrada no pool.")
+            logger.info(
+                "Omitindo trilha '%s' para finalidade '%s' (%s).",
+                track.name,
+                publish_intent,
+                reason,
+            )
+    if not allowed_pool:
+        logger.warning(
+            "Nenhuma trilha sonora autorizada para finalidade '%s' encontrada no pool.",
+            publish_intent,
+        )
+        return None, 0.0
+    pool = allowed_pool
 
     topic_blob = f"{project.song_title} {project.topic_angle} {project.narration_full}".lower()
     mood_groups = [
