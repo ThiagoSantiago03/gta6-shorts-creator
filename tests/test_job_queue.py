@@ -130,3 +130,65 @@ def test_job_persistence_and_reload(tmp_path: Path):
     assert loaded.id == job.id
     assert loaded.topic_title == "Teste de Persistência"
     assert loaded.status == "pendente"
+
+
+def test_recovery_requeues_interrupted_and_pending_jobs(tmp_path: Path):
+    """T1: Jobs 'executando' (interrompidos por crash/reinício) e 'pendente' devem ser reenfileirados e concluídos."""
+    storage = tmp_path / "jobs"
+    m1 = JobQueueManager(storage_dir=storage, auto_start_worker=False)
+    running = m1.create_job("interrompido no meio")
+    pending = m1.create_job("ainda na fila")
+    running.status = "executando"
+    running.stages["pesquisa"]["status"] = "ok"
+    running.stages["roteiro"]["status"] = "ok"
+    running.stages["tts"]["status"] = "executando"
+    m1._save_job_to_disk(running)
+
+    executed: list[tuple[str, str]] = []
+    m2 = JobQueueManager(storage_dir=storage, auto_start_worker=False)
+    for st in STAGE_NAMES:
+        m2.register_stage_handler(st, lambda job, st=st: executed.append((job.id, st)))
+
+    recovered = m2.recover_interrupted_jobs()
+    assert set(recovered) == {running.id, pending.id}
+
+    m2.start_worker()
+    m2._queue.join()
+    m2.stop_worker()
+
+    assert m2.get_job(running.id).status == "ok"
+    assert m2.get_job(pending.id).status == "ok"
+    # Etapas já concluídas NÃO rodam de novo; a interrompida sim
+    assert (running.id, "pesquisa") not in executed
+    assert (running.id, "roteiro") not in executed
+    assert (running.id, "tts") in executed
+    assert (running.id, "render") in executed
+    assert (running.id, "qa") in executed
+
+
+def test_resume_allows_orphan_executando_job(tmp_path: Path):
+    """T1: resume_job deve permitir retomar um job órfão com status 'executando' após reinício."""
+    storage = tmp_path / "jobs"
+    m1 = JobQueueManager(storage_dir=storage, auto_start_worker=False)
+    job = m1.create_job("órfão")
+    job.status = "executando"
+    job.stages["pesquisa"]["status"] = "executando"
+    m1._save_job_to_disk(job)
+
+    m2 = JobQueueManager(storage_dir=storage, auto_start_worker=False)
+    for st in STAGE_NAMES:
+        m2.register_stage_handler(st, lambda j: None)
+    resumed = m2.resume_job(job.id)
+    assert resumed.status == "pendente"
+    m2.start_worker()
+    m2._queue.join()
+    m2.stop_worker()
+    assert m2.get_job(job.id).status == "ok"
+
+
+def test_enqueue_is_deduplicated(tmp_path: Path):
+    """T1: _enqueue deve deduplicar job_id já presente na fila."""
+    m = JobQueueManager(storage_dir=tmp_path / "jobs", auto_start_worker=False)
+    job = m.create_job("dup")
+    assert m._enqueue(job.id) is False
+

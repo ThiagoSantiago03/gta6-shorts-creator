@@ -69,15 +69,56 @@ class JobQueueManager:
         self.storage_dir = storage_dir or JOBS_DIR
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._queue: queue.Queue[str] = queue.Queue()
+        self._queued: set[str] = set()
+        self._current_job_id: str | None = None
         self._jobs: dict[str, JobItem] = {}
         self._lock = threading.RLock()
         self._stage_handlers: dict[str, Callable[[JobItem], None]] = {}
         self._worker_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
-        self._load_persisted_jobs()
+        self._load_persisted_jobs()  # só carrega; NÃO enfileira automaticamente
         if auto_start_worker:
             self.start_worker()
+
+    def _enqueue(self, job_id: str) -> bool:
+        with self._lock:
+            if job_id in self._queued:
+                return False
+            self._queued.add(job_id)
+            self._queue.put(job_id)
+            return True
+
+    def recover_interrupted_jobs(self) -> list[str]:
+        """Reenfileira jobs 'executando' (órfãos após crash/reinício) e 'pendente'. Chamar após registrar handlers."""
+        recovered: list[str] = []
+        with self._lock:
+            for job in sorted(self._jobs.values(), key=lambda j: j.created_at):
+                if job.status not in ("pendente", "executando"):
+                    continue
+                was_running = job.status == "executando"
+                for st in STAGE_NAMES:
+                    info = job.stages.get(st, {})
+                    if info.get("status") == "executando":
+                        info["status"] = "pendente"
+                        info["error"] = None
+                        job.stages[st] = info
+                job.status = "pendente"
+                job.updated_at = _now_iso()
+                job.logs.append(
+                    f"[{job.updated_at}] "
+                    + (
+                        "Job interrompido por reinício; recolocado na fila."
+                        if was_running
+                        else "Job pendente recolocado na fila após reinício."
+                    )
+                )
+                self._save_job_to_disk(job)
+                self._enqueue(job.id)
+                recovered.append(job.id)
+        if recovered:
+            logger.info("Recuperados %d jobs interrompidos/pendentes após reinício.", len(recovered))
+        return recovered
 
     def register_stage_handler(self, stage: str, handler: Callable[[JobItem], None]) -> None:
         with self._lock:
@@ -120,7 +161,7 @@ class JobQueueManager:
             )
             self._jobs[jid] = job
             self._save_job_to_disk(job)
-            self._queue.put(jid)
+            self._enqueue(jid)
             logger.info("Job %s ('%s') enfileirado.", jid, topic_title)
             return job
 
@@ -160,7 +201,7 @@ class JobQueueManager:
             if not job:
                 raise ValueError(f"Job {job_id} não encontrado.")
 
-            if job.status == "executando":
+            if job.status == "executando" and job.id == self._current_job_id:
                 logger.warning("Job %s já está em execução.", job_id)
                 return job
 
@@ -182,7 +223,7 @@ class JobQueueManager:
             job.updated_at = _now_iso()
             job.logs.append(f"[{job.updated_at}] Job retomado a partir da etapa '{job.current_stage}'.")
             self._save_job_to_disk(job)
-            self._queue.put(job.id)
+            self._enqueue(job.id)
             logger.info("Job %s retomado a partir da etapa '%s'.", job.id, job.current_stage)
             return job
 
@@ -193,11 +234,16 @@ class JobQueueManager:
             except queue.Empty:
                 continue
 
+            with self._lock:
+                self._queued.discard(job_id)
+                self._current_job_id = job_id
             try:
                 self._process_single_job(job_id)
             except Exception as exc:
                 logger.exception("Erro inesperado no loop de execução do job %s: %s", job_id, exc)
             finally:
+                with self._lock:
+                    self._current_job_id = None
                 self._queue.task_done()
 
     def _process_single_job(self, job_id: str) -> None:
@@ -297,6 +343,22 @@ def setup_production_stage_handlers(manager: JobQueueManager) -> None:
         job.logs.append(f"[{_now_iso()}] Pauta validada: '{job.topic_title}'.")
 
     def _roteiro(job: JobItem) -> None:
+        # Idempotência: se uma execução anterior já criou o projeto e ele existe, reaproveita sem criar órfão
+        if job.project_id:
+            try:
+                _load_project(job.project_id)
+                job.logs.append(
+                    f"[{_now_iso()}] Projeto '{job.project_id}' já existe; etapa de roteiro reaproveitada."
+                )
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Projeto '%s' referenciado pelo job %s não pôde ser carregado (%s); gerando novo roteiro.",
+                    job.project_id,
+                    job.id,
+                    exc,
+                )
+
         topic_title = job.topic_title
         pid = f"gta6-{_slugify(topic_title)}-{uuid.uuid4().hex[:6]}"
         g_data = generate_gaming_script(
@@ -409,7 +471,10 @@ def setup_production_stage_handlers(manager: JobQueueManager) -> None:
     manager.register_stage_handler("qa", _qa)
 
 
-# Global singleton instance for the app
-JOB_MANAGER = JobQueueManager()
+# Global singleton instance for the app:
+# 1) Cria sem iniciar o worker; 2) registra handlers reais; 3) recupera jobs interrompidos; 4) inicia o worker.
+JOB_MANAGER = JobQueueManager(auto_start_worker=False)
 setup_production_stage_handlers(JOB_MANAGER)
+JOB_MANAGER.recover_interrupted_jobs()
+JOB_MANAGER.start_worker()
 
