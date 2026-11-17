@@ -100,6 +100,40 @@ def _output_dir(project_id: str) -> Path:
     return OUTPUTS_DIR / project_id
 
 
+MAX_UPLOAD_BYTES: dict[str, int] = {
+    "video": int(os.getenv("MAX_UPLOAD_VIDEO_MB", "500")) * 1024 * 1024,
+    "audio": int(os.getenv("MAX_UPLOAD_AUDIO_MB", "50")) * 1024 * 1024,
+    "image": int(os.getenv("MAX_UPLOAD_IMAGE_MB", "20")) * 1024 * 1024,
+}
+
+
+async def _save_upload(file: UploadFile, dest: Path, kind: str) -> int:
+    """Grava upload em blocos de 1 MB, aborta com HTTP 413 acima do limite e não deixa arquivo parcial."""
+    limit = MAX_UPLOAD_BYTES[kind]
+    tmp = dest.with_name(dest.name + ".part")
+    written = 0
+    try:
+        with tmp.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if written > limit:
+                    limit_label = (
+                        f"{limit // (1024 * 1024)} MB"
+                        if limit >= 1024 * 1024
+                        else f"{limit} bytes"
+                    )
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Arquivo excede o limite de {limit_label}.",
+                    )
+                out.write(chunk)
+        tmp.replace(dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return written
+
+
 def _load_project(project_id: str) -> MusicStoryProject:
     pdir = _project_dir(project_id)
     pfile = pdir / "project.json"
@@ -362,7 +396,7 @@ async def upload_gaming_clip(file: UploadFile = File(...)) -> dict[str, Any]:
     dest = GTA6_INPUTS_DIR / f"{safe_stem}{ext}"
     if dest.exists():
         dest = GTA6_INPUTS_DIR / f"{safe_stem}-{uuid.uuid4().hex[:4]}{ext}"
-    dest.write_bytes(await file.read())
+    await _save_upload(file, dest, "video")
     cards = index_trailer_scenes(dest, max_clips=12, force=True)
     return {
         "filename": dest.name,
@@ -918,7 +952,8 @@ async def upload_audio(project_id: str, file: UploadFile = File(...)) -> dict[st
     if ext not in {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".mp4", ".mov", ".webm", ".mkv"}:
         raise HTTPException(status_code=400, detail="Formato de áudio/vídeo não suportado.")
     dest = audio_dir / f"track{ext}"
-    dest.write_bytes(await file.read())
+    upload_kind = "video" if ext in {".mp4", ".mov", ".webm", ".mkv"} else "audio"
+    await _save_upload(file, dest, upload_kind)
 
     total_dur = get_audio_duration(dest)
     clip_len = min(54.0, float(project.max_duration_sec or 58.0)) if project.niche == "gaming_news" else project.audio_clip_duration
@@ -1170,7 +1205,7 @@ async def upload_band_clip(project_id: str, file: UploadFile = File(...)) -> dic
     if ext not in {".mp4", ".mov", ".webm", ".mkv"}:
         raise HTTPException(status_code=400, detail="Formato de clipe não suportado (use MP4, MOV, WEBM ou MKV).")
     dest = clips_dir / f"clip_{len(project.band_video_clips) + 1:02d}_{uuid.uuid4().hex[:6]}{ext}"
-    dest.write_bytes(await file.read())
+    await _save_upload(file, dest, "video")
 
     project.band_video_clips = [*project.band_video_clips, str(dest)]
     try:
@@ -1300,7 +1335,7 @@ async def upload_scene_image(
     scenes_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "img.png").suffix.lower() or ".png"
     raw_dest = scenes_dir / f"scene_{scene_index:02d}_upload{ext}"
-    raw_dest.write_bytes(await file.read())
+    await _save_upload(file, raw_dest, "image")
     final_png = scenes_dir / f"scene_{scene_index:02d}.png"
     fit_cover_9_16(raw_dest, final_png)
     raw_dest.unlink(missing_ok=True)
@@ -1331,7 +1366,7 @@ async def upload_scene_video(
     if ext not in {".mp4", ".mov", ".webm", ".mkv"}:
         raise HTTPException(status_code=400, detail="Formato de vídeo não suportado (use MP4, MOV, WEBM ou MKV).")
     dest_vid = scenes_dir / f"scene_{scene_index:02d}_custom{ext}"
-    dest_vid.write_bytes(await file.read())
+    await _save_upload(file, dest_vid, "video")
 
     start_val = max(0.0, float(video_start_sec or 0.0))
     final_png = scenes_dir / f"scene_{scene_index:02d}.png"
@@ -1482,7 +1517,7 @@ async def upload_scene_overlay(
     scenes_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "overlay.png").suffix.lower() or ".png"
     raw_dest = scenes_dir / f"scene_{scene_index:02d}_ov_upload{ext}"
-    raw_dest.write_bytes(await file.read())
+    await _save_upload(file, raw_dest, "image")
     ov_png = scenes_dir / f"scene_{scene_index:02d}_overlay.png"
     fit_overlay_editorial_png(raw_dest, ov_png)
     raw_dest.unlink(missing_ok=True)
@@ -1598,7 +1633,7 @@ async def upload_reel2_image(project_id: str, file: UploadFile = File(...)) -> d
     pdir.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "emblem.png").suffix.lower() or ".png"
     dest = pdir / f"reel2_upload{ext}"
-    dest.write_bytes(await file.read())
+    await _save_upload(file, dest, "image")
     project.reel2_center_image = str(dest)
     _save_project(project)
     return {"reel2_center_image": str(dest)}

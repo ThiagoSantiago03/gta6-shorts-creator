@@ -13,4 +13,6 @@ inputs/*
 *.wav
 *.bak
 *.tmp*
+*.part
+baseline_pytest.txt
 verify/
