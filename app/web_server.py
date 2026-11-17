@@ -13,13 +13,15 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger("gta6_studio")
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.audio_processor import (
     compute_waveform_peaks,
@@ -76,8 +78,24 @@ from app.visual_assets import (
 )
 
 
-app = FastAPI(title="Estúdio Reels — História da Música")
+app = FastAPI(title="GTA 6 Shorts Studio")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+_ALLOWED_HOSTS: list[str] = [
+    h.strip()
+    for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    if h.strip()
+]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
+
+
+@app.middleware("http")
+async def reject_foreign_origin(request, call_next):
+    origin = request.headers.get("origin")
+    if origin and request.method not in ("GET", "HEAD", "OPTIONS"):
+        if urlparse(origin).hostname not in _ALLOWED_HOSTS:
+            return JSONResponse({"detail": "Origem não permitida."}, status_code=403)
+    return await call_next(request)
 
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()

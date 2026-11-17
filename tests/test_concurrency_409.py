@@ -4,7 +4,7 @@ from pathlib import Path
 from app.web_server import app, _save_project
 from app.models import MusicStoryProject, SceneItem
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1:8765")
 
 def test_optimistic_locking_revision_increment(tmp_path, monkeypatch):
     """Garante que salvar um projeto incrementa atomicamente a sua revisão."""

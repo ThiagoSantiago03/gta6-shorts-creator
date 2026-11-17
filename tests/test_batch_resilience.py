@@ -3,7 +3,7 @@ from app.models import TopicTrendItem
 from app.web_server import app
 from fastapi.testclient import TestClient
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1:8765")
 
 def test_batch_daily_resilience_partial_failure():
     """Verifica se uma falha em uma pauta não aborta o lote inteiro."""

@@ -12,7 +12,7 @@ from app.gaming_radar import (
 from app.gaming_scriptwriter import synthesize_gaming_short_script
 from app.web_server import app
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1:8765")
 
 def test_classify_confidence_and_status_4_classes():
     # 1. Confirmado
