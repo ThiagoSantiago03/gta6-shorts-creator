@@ -371,9 +371,9 @@ A tabela abaixo acompanha o status das tarefas planejadas em conjunto com ChatGP
 | **Tarefa 3.3** | Mixagem de Áudio com Sidechain | **Concluída** | Ducking via `sidechaincompress` (trilha atenua dinamicamente na voz), equalização master com `loudnorm=I=-14:TP=-1.5:LRA=11` e controle de True Peak no QA. |
 | **Tarefa 3.1** | Enquadramentos Verticais (Blur-Fill) | **Concluída** | Modos `crop_center`, `crop_focus` (com `focus_x` de 0.0 a 1.0) e `blur_fill` configuráveis por cena no backend e expostos no editor da UI. |
 | **Tarefa 3.2** | Ken Burns Controlado | **Concluída** | Duração real e número de frames exatos calculados por cena (`d=n_frames`), sem d=99999 e com separação estrita dos fluxos de vídeo e imagem estática. |
-| **Tarefa 4.2** | Fila de Jobs em Lote com Recuperação | *Pendente* | Execução de lote com status por etapa e retomada de jobs que falharem. |
-| **Tarefas 4.3/4.4** | QA com Critérios Objetivos & Safe Zones | *Pendente* | Checklist formal aprovado/reprovado e margens para interface de celular. |
-| **Tarefa 3.4 / Etapa 5** | Legendas Word Boundaries & Ajustes | *Pendente* | Sincronia fina por palavra e padronização final. |
+| **Tarefa 4.2** | Fila de Jobs em Lote com Recuperação | **Concluída** | Fila sequencial FIFO (`JobQueueManager` em `app/job_queue.py`) com 5 estágios (`pesquisa`, `roteiro`, `tts`, `render`, `qa`), isolamento total de falha no lote e retomada a partir da etapa pendente. |
+| **Tarefas 4.3/4.4** | QA com Critérios Objetivos & Safe Zones | **Concluída** | Checklist formal de 15 itens em 4 categorias (`tecnica`, `narrativa`, `visual`, `editorial`), rotulação "Pronto" / "Pronto com Ressalvas (Requer Confirmação Editorial)", e safe zones (`SAFE_ZONE_TOP_PX=250`, `SAFE_ZONE_BOTTOM_PX=320`). |
+| **Tarefa 3.4 / Etapa 5** | Legendas Word Boundaries & Ajustes | **Concluída** | Sincronia fina via `WordBoundary` do Edge-TTS, inicialização segura do FFmpeg com validação de filtros (`verify_ffmpeg_installation()`), dependências fixadas em `requirements-lock.txt` no Python 3.14.7 e arquitetura local-first. |
 
 ---
 

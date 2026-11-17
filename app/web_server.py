@@ -19,7 +19,7 @@ logger = logging.getLogger("gta6_studio")
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.audio_processor import (
     compute_waveform_peaks,
@@ -1741,10 +1741,100 @@ def start_render(project_id: str) -> dict[str, Any]:
 
 @app.get("/api/jobs/{project_id}")
 def get_job(project_id: str) -> dict[str, Any]:
+    if project_id.startswith("job-"):
+        from app.job_queue import JOB_MANAGER
+        job = JOB_MANAGER.get_job(project_id)
+        if job:
+            return job.to_dict()
     with JOBS_LOCK:
         if project_id in JOBS:
             return JOBS[project_id]
     return {"project_id": project_id, "state": "idle", "progress": 0, "message": "", "error": None}
+
+
+class CreateBatchJobsRequest(BaseModel):
+    topics: list[Any] = Field(default_factory=list)
+    query: str = "GTA 6"
+    geo: str = "BR"
+    count: int = 5
+
+
+@app.post("/api/queue/jobs/batch")
+def create_batch_jobs_queue(req: CreateBatchJobsRequest) -> dict[str, Any]:
+    from app.job_queue import JOB_MANAGER
+    items_to_enqueue: list[dict[str, Any]] = []
+    if req.topics:
+        for t in req.topics:
+            if isinstance(t, dict):
+                items_to_enqueue.append(t)
+            else:
+                items_to_enqueue.append({"title": str(t).strip()})
+    else:
+        radar_items = fetch_daily_gaming_radar(query=req.query.strip() or "GTA 6", geo=req.geo.strip() or "BR")
+        valid_items = [
+            it for it in radar_items
+            if getattr(it, "status_confiabilidade", "") != "nao_verificado"
+            and it.confidence not in ("Não verificado", "nao_verificado")
+        ]
+        for it in valid_items[: max(1, min(req.count, 10))]:
+            items_to_enqueue.append({
+                "title": it.title.strip(),
+                "suggested_angle": it.suggested_angle or "",
+                "url": it.url or "",
+                "source": it.source or "",
+                "published_at": it.published_at or "",
+                "confidence": it.confidence or "Notícia / Imprensa",
+                "status_confiabilidade": getattr(it, "status_confiabilidade", "reportado"),
+            })
+
+    if not items_to_enqueue:
+        raise HTTPException(status_code=400, detail="Nenhuma pauta válida para enfileirar.")
+
+    jobs = JOB_MANAGER.create_batch(items_to_enqueue)
+    return {
+        "ok": True,
+        "count": len(jobs),
+        "jobs": [j.to_dict() for j in jobs],
+    }
+
+
+@app.get("/api/queue/jobs")
+def list_queue_jobs() -> dict[str, Any]:
+    from app.job_queue import JOB_MANAGER
+    jobs = JOB_MANAGER.list_jobs()
+    return {
+        "ok": True,
+        "count": len(jobs),
+        "jobs": [j.to_dict() for j in jobs],
+    }
+
+
+@app.get("/api/queue/jobs/{job_id}")
+def get_queue_job_details(job_id: str) -> dict[str, Any]:
+    from app.job_queue import JOB_MANAGER
+    job = JOB_MANAGER.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' não encontrado.")
+    return {"ok": True, "job": job.to_dict()}
+
+
+@app.post("/api/queue/jobs/{job_id}/resume")
+def resume_queue_job(job_id: str) -> dict[str, Any]:
+    from app.job_queue import JOB_MANAGER
+    try:
+        job = JOB_MANAGER.resume_job(job_id)
+        return {"ok": True, "job": job.to_dict()}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/queue/jobs/{job_id}/logs")
+def get_queue_job_logs(job_id: str) -> dict[str, Any]:
+    from app.job_queue import JOB_MANAGER
+    job = JOB_MANAGER.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' não encontrado.")
+    return {"ok": True, "job_id": job.id, "logs": job.logs}
 
 
 @app.get("/api/projects/{project_id}/scene-preview/{scene_index}")

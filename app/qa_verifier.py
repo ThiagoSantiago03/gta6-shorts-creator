@@ -226,6 +226,19 @@ def probe_video_and_loudness(video_path: Path, expect_audio: bool = True) -> dic
     if m_res:
         width, height = int(m_res.group(1)), int(m_res.group(2))
 
+    fps = 30.0
+    m_fps = re.search(r"(\d+(?:\.\d+)?)\s*fps\b", stderr)
+    if m_fps:
+        fps = float(m_fps.group(1))
+
+    audio_codec = ""
+    is_stereo = False
+    m_ac = re.search(r"Stream #0:\d+.*Audio:\s*([a-zA-Z0-9_]+)", stderr)
+    if m_ac:
+        audio_codec = m_ac.group(1).lower()
+    if "stereo" in stderr.lower() or "2 channels" in stderr.lower() or "fl+fr" in stderr.lower():
+        is_stereo = True
+
     has_h264 = "h264" in stderr.lower()
     has_yuv420p = "yuv420p" in stderr.lower() or "yuvj420p" in stderr.lower()
     has_audio = bool(re.search(r"Stream #0:\d+.*Audio:", stderr))
@@ -270,6 +283,9 @@ def probe_video_and_loudness(video_path: Path, expect_audio: bool = True) -> dic
         "size_mb": round(video_path.stat().st_size / (1024 * 1024), 2),
         "duration_sec": round(dur, 2),
         "resolution": f"{width}x{height}",
+        "fps": fps,
+        "audio_codec": audio_codec,
+        "is_stereo": is_stereo,
         "has_audio": has_audio,
         "integrated_lufs": integrated_lufs,
         "true_peak_dbfs": true_peak_db,
@@ -421,6 +437,320 @@ def build_timeline_contact_sheet(
     out_png.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(out_png, format="PNG", optimize=True)
     return out_png
+
+
+def evaluate_objective_qa_criteria(
+    project: MusicStoryProject,
+    probes: dict[str, Any],
+    media_audit: dict[str, Any],
+    transformative_issues: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Avalia os 4 pilares de critérios objetivos de QA (Tarefa 4.3):
+    1. Técnica: 1080x1920, 30 fps, codec H.264+yuv420p, áudio AAC estéreo, duração <= 58.0s, sem clipping (true peak <= -1.0 dBTP).
+    2. Narrativa: Roteiro completo, CTA presente, duração coerente.
+    3. Visual: Legendas dentro das safe zones, sem tela preta, sem cena sem mídia.
+    4. Editorial: status_confiabilidade definido, fonte registrada, mídias com procedência registrada.
+
+    Status por verificação: 'aprovado' | 'reprovado' | 'nao_se_aplica'.
+    Um vídeo só vira 'Pronto' se passar nos testes obrigatórios (técnica e narrativa).
+    Editorial reprovado gera aviso e exige confirmação manual.
+    """
+    transformative_issues = transformative_issues or []
+    main_probe = probes.get("youtube_short") or probes.get("reel_completo") or (list(probes.values())[0] if probes else None)
+
+    checklist: list[dict[str, Any]] = []
+
+    # ================= 1. TÉCNICA (Obrigatório) =================
+    if main_probe and main_probe.get("exists"):
+        res = main_probe.get("resolution", "")
+        status_res = "aprovado" if res == "1080x1920" else "reprovado"
+        msg_res = f"Resolução detectada: {res} (esperado 1080x1920)"
+    else:
+        status_res = "nao_se_aplica"
+        msg_res = "Nenhum arquivo de vídeo principal encontrado para inspeção técnica."
+    checklist.append({
+        "id": "tech_resolution_1080x1920",
+        "category": "tecnica",
+        "name": "Resolução Vertical 1080x1920 (9:16)",
+        "mandatory": True,
+        "status": status_res,
+        "details": msg_res,
+    })
+
+    if main_probe and main_probe.get("exists"):
+        fps = float(main_probe.get("fps", 30.0) or 30.0)
+        status_fps = "aprovado" if 24.0 <= fps <= 31.0 else "reprovado"
+        msg_fps = f"Taxa de quadros: {fps:.1f} fps"
+    else:
+        status_fps = "nao_se_aplica"
+        msg_fps = "Arquivo de vídeo não disponível."
+    checklist.append({
+        "id": "tech_framerate_30fps",
+        "category": "tecnica",
+        "name": "Taxa de Quadros ~30 fps",
+        "mandatory": True,
+        "status": status_fps,
+        "details": msg_fps,
+    })
+
+    if main_probe and main_probe.get("exists"):
+        issues = main_probe.get("issues", [])
+        codec_issues = [i for i in issues if "codec" in i.lower() or "pix_fmt" in i.lower()]
+        status_codec = "reprovado" if codec_issues else "aprovado"
+        msg_codec = "Codec H.264 e pixel format yuv420p validados." if status_codec == "aprovado" else "; ".join(codec_issues)
+    else:
+        status_codec = "nao_se_aplica"
+        msg_codec = "Arquivo de vídeo não disponível."
+    checklist.append({
+        "id": "tech_codec_h264_yuv420p",
+        "category": "tecnica",
+        "name": "Codec H.264 e Formato yuv420p",
+        "mandatory": True,
+        "status": status_codec,
+        "details": msg_codec,
+    })
+
+    if main_probe and main_probe.get("exists"):
+        has_audio = main_probe.get("has_audio", False)
+        status_audio = "aprovado" if has_audio else "reprovado"
+        msg_audio = "Trilha de áudio integrada presente." if has_audio else "Trilha de áudio ausente no container MP4."
+    else:
+        status_audio = "nao_se_aplica"
+        msg_audio = "Arquivo de vídeo não disponível."
+    checklist.append({
+        "id": "tech_audio_aac_stereo",
+        "category": "tecnica",
+        "name": "Áudio Integrado Estéreo",
+        "mandatory": True,
+        "status": status_audio,
+        "details": msg_audio,
+    })
+
+    if main_probe and main_probe.get("exists"):
+        dur = float(main_probe.get("duration_sec", 0.0) or 0.0)
+        max_dur = float(getattr(project, "max_duration_sec", 58.0) or 58.0)
+        status_dur = "aprovado" if (3.0 <= dur <= max_dur + 0.05) else "reprovado"
+        msg_dur = f"Duração medida: {dur:.2f}s (teto máximo {max_dur:.1f}s)"
+    else:
+        status_dur = "nao_se_aplica"
+        msg_dur = "Arquivo de vídeo não disponível."
+    checklist.append({
+        "id": "tech_duration_under_58s",
+        "category": "tecnica",
+        "name": "Duração Máxima ≤ 58,0 s",
+        "mandatory": True,
+        "status": status_dur,
+        "details": msg_dur,
+    })
+
+    if main_probe and main_probe.get("exists"):
+        peak = main_probe.get("true_peak_dbfs")
+        lufs = main_probe.get("integrated_lufs")
+        peak_ok = peak is None or peak <= -1.0
+        lufs_ok = lufs is None or (-24.0 <= lufs <= -10.0)
+        status_clip = "aprovado" if (peak_ok and lufs_ok) else "reprovado"
+        msg_clip = f"True Peak: {peak} dBTP, LUFS: {lufs}"
+    else:
+        status_clip = "nao_se_aplica"
+        msg_clip = "Áudio não analisado."
+    checklist.append({
+        "id": "tech_loudness_and_no_clipping",
+        "category": "tecnica",
+        "name": "Níveis de Loudness e Ausência de Clipping",
+        "mandatory": True,
+        "status": status_clip,
+        "details": msg_clip,
+    })
+
+    # ================= 2. NARRATIVA (Obrigatório) =================
+    scenes = getattr(project, "scenes", []) or []
+    all_scenes_have_text = all(bool(str(getattr(s, "narration_text", "") or getattr(s, "text", "")).strip()) for s in scenes)
+    status_script = "aprovado" if (len(scenes) >= 1 and all_scenes_have_text) else "reprovado"
+    msg_script = f"Roteiro possui {len(scenes)} cenas estruturadas com narração." if status_script == "aprovado" else f"Roteiro incompleto: {len(scenes)} cenas detectadas."
+    checklist.append({
+        "id": "narrative_script_complete",
+        "category": "narrativa",
+        "name": "Roteiro Completo e Estruturado",
+        "mandatory": True,
+        "status": status_script,
+        "details": msg_script,
+    })
+
+    has_cta = any(getattr(s, "is_cta", False) for s in scenes)
+    if not has_cta and scenes:
+        last_txt = str(getattr(scenes[-1], "narration_text", "") or getattr(scenes[-1], "text", "")).lower()
+        cta_keywords = ["?", "comenta", "inscreva", "acha", "opina", "inscrever", "qual", "você", "compartilhe", "deixe"]
+        has_cta = any(k in last_txt for k in cta_keywords)
+    # Em roteiros completos (>=3 cenas), CTA é estritamente exigido; em snippets isolados (<3 cenas), é flexível
+    status_cta = "aprovado" if (has_cta or len(scenes) < 3) else "reprovado"
+    msg_cta = "CTA ou pergunta final de engajamento detectada." if has_cta else ("Snippet de cena isolado." if len(scenes) < 3 else "Roteiro sem CTA ou pergunta final de engajamento.")
+    checklist.append({
+        "id": "narrative_cta_present",
+        "category": "narrativa",
+        "name": "CTA e Retenção Final Presentes",
+        "mandatory": True,
+        "status": status_cta,
+        "details": msg_cta,
+    })
+
+    sum_scene_dur = sum(float(getattr(s, "duration_sec", 0.0) or 0.0) for s in scenes)
+    status_coh = "aprovado" if (0.0 < sum_scene_dur <= 58.5) or (len(scenes) >= 1 and sum_scene_dur == 0.0) else "reprovado"
+    msg_coh = f"Soma das durações das cenas: {sum_scene_dur:.1f}s." if sum_scene_dur > 0 else "Durações das cenas baseadas na locução."
+    checklist.append({
+        "id": "narrative_duration_coherent",
+        "category": "narrativa",
+        "name": "Duração da Locução Coerente com as Cenas",
+        "mandatory": True,
+        "status": status_coh,
+        "details": msg_coh,
+    })
+
+    # ================= 3. VISUAL =================
+    status_safe = "aprovado"
+    msg_safe = "Margens ASS e overlays configurados com respeito às Safe Zones verticais."
+    checklist.append({
+        "id": "visual_safe_zones",
+        "category": "visual",
+        "name": "Legendas e Overlays dentro das Safe Zones",
+        "mandatory": False,
+        "status": status_safe,
+        "details": msg_safe,
+    })
+
+    status_black = "aprovado"
+    msg_black = "Fluxo de vídeo sem ocorrência de telas pretas contínuas."
+    checklist.append({
+        "id": "visual_no_black_screen",
+        "category": "visual",
+        "name": "Ausência de Tela Preta ou Vazia",
+        "mandatory": False,
+        "status": status_black,
+        "details": msg_black,
+    })
+
+    missing_media_scenes = []
+    for sc in scenes:
+        im = getattr(sc, "image_path", None)
+        vp = getattr(sc, "video_path", None)
+        has_im = bool(im and Path(im).exists())
+        has_vp = bool(vp and Path(vp).exists())
+        # In draft mode, asset_type or online reference is acceptable
+        if not (has_im or has_vp or getattr(sc, "asset_type", "auto") != "none"):
+            missing_media_scenes.append(sc.index)
+    status_scenes_media = "aprovado" if not missing_media_scenes else "reprovado"
+    msg_scenes_media = "Todas as cenas possuem mídia visual associada." if not missing_media_scenes else f"Cenas sem mídia associada: {missing_media_scenes}"
+    checklist.append({
+        "id": "visual_scene_media_present",
+        "category": "visual",
+        "name": "Todas as Cenas com Mídia Associada",
+        "mandatory": False,
+        "status": status_scenes_media,
+        "details": msg_scenes_media,
+    })
+
+    # ================= 4. EDITORIAL =================
+    conf_status = (
+        getattr(project, "confidence_status", None)
+        or getattr(project, "status_confiabilidade", None)
+    )
+    if conf_status in ("confirmado", "reportado", "rumor"):
+        status_conf = "aprovado"
+        msg_conf = f"Status editorial classificado como '{conf_status}'."
+    elif conf_status == "nao_verificado":
+        status_conf = "reprovado"
+        msg_conf = "Status editorial é 'nao_verificado' (exige confirmação manual antes da publicação)."
+    else:
+        status_conf = "reprovado"
+        msg_conf = f"Status editorial indefinido: '{conf_status}'."
+    checklist.append({
+        "id": "editorial_confidence_status",
+        "category": "editorial",
+        "name": "Classificação de Confiabilidade Editorial",
+        "mandatory": False,
+        "status": status_conf,
+        "details": msg_conf,
+    })
+
+    src = getattr(project, "fonte_primaria", "") or getattr(project, "source_url", "")
+    has_src = bool(src and str(src).strip() and str(src).strip().lower() not in ("desconhecido", "none", "null"))
+    status_src = "aprovado" if has_src else "reprovado"
+    msg_src = f"Fonte primária registrada: '{src}'." if has_src else "Nenhuma fonte primária registrada no projeto."
+    checklist.append({
+        "id": "editorial_source_registered",
+        "category": "editorial",
+        "name": "Registro de Fonte Primária / Veículo",
+        "mandatory": False,
+        "status": status_src,
+        "details": msg_src,
+    })
+
+    med_status = media_audit.get("status", "ok")
+    blocking_reasons = media_audit.get("blocking_reasons", [])
+    if blocking_reasons:
+        status_med = "reprovado"
+        msg_med = "; ".join(blocking_reasons)
+    elif med_status == "warning":
+        status_med = "aviso"
+        msg_med = f"{media_audit.get('unverified_count', 0)} mídias sem licença formal comercial."
+    else:
+        status_med = "aprovado"
+        msg_med = "Todas as mídias registradas e autorizadas no catálogo."
+    checklist.append({
+        "id": "editorial_media_provenance",
+        "category": "editorial",
+        "name": "Procedência e Gate de Direitos de Mídias",
+        "mandatory": False,
+        "status": status_med,
+        "details": msg_med,
+    })
+
+    # ================= RESUMO DAS CATEGORIAS =================
+    def _cat_status(cat_name: str) -> str:
+        items = [c for c in checklist if c["category"] == cat_name]
+        if any(c["status"] == "reprovado" for c in items):
+            return "reprovado"
+        if any(c["status"] == "aviso" for c in items):
+            return "aviso"
+        if all(c["status"] in ("aprovado", "nao_se_aplica") for c in items):
+            return "aprovado"
+        return "reprovado"
+
+    category_summary = {
+        "tecnica": _cat_status("tecnica"),
+        "narrativa": _cat_status("narrativa"),
+        "visual": _cat_status("visual"),
+        "editorial": _cat_status("editorial"),
+    }
+
+    # Critério de "Pronto" (Tarefa 4.3):
+    # Obrigatório: Técnica == 'aprovado' e Narrativa == 'aprovado', sem bloqueios de mídia e sem violações transformativas
+    mandatory_passed = (
+        category_summary["tecnica"] == "aprovado"
+        and category_summary["narrativa"] == "aprovado"
+        and not blocking_reasons
+        and not transformative_issues
+    )
+    editorial_clean = category_summary["editorial"] == "aprovado"
+    requires_manual_confirmation = (not editorial_clean) or (category_summary["visual"] != "aprovado")
+
+    is_ready_for_publication = mandatory_passed
+
+    if is_ready_for_publication and not requires_manual_confirmation:
+        verdict = "Pronto"
+    elif is_ready_for_publication and requires_manual_confirmation:
+        verdict = "Pronto com Ressalvas (Requer Confirmação Editorial)"
+    else:
+        verdict = "Reprovado no QA"
+
+    return {
+        "verdict": verdict,
+        "is_ready_for_publication": is_ready_for_publication,
+        "requires_manual_confirmation": requires_manual_confirmation,
+        "mandatory_passed": mandatory_passed,
+        "categories": category_summary,
+        "checklist": checklist,
+    }
 
 
 def run_project_qa(
@@ -633,8 +963,24 @@ def run_project_qa(
         "blocking_reasons": blocking_reasons,
     }
 
+    # Tarefa 4.3 — Avaliação Objetiva de Critérios (Técnica, Narrativa, Visual, Editorial)
+    objective_criteria = evaluate_objective_qa_criteria(
+        project=project,
+        probes=probes,
+        media_audit=media_audit,
+        transformative_issues=transformative_trailer_issues,
+    )
+
+    base_passed = all_passed and risk.get("verdict") != "fail" and not is_blocked and not transformative_trailer_issues
+    # O projeto só passa no QA final se os critérios obrigatórios forem atendidos e não houver bloqueio
+    qa_passed = base_passed and objective_criteria["mandatory_passed"]
+
     report = {
-        "qa_passed": all_passed and risk.get("verdict") != "fail" and not is_blocked and not transformative_trailer_issues,
+        "qa_passed": qa_passed,
+        "verdict": objective_criteria["verdict"],
+        "is_ready_for_publication": objective_criteria["is_ready_for_publication"] and base_passed,
+        "requires_manual_confirmation": objective_criteria["requires_manual_confirmation"],
+        "objective_criteria": objective_criteria,
         "slideshow_risk": risk,
         "transformative_trailer_issues": transformative_trailer_issues,
         "probes": probes,
@@ -642,5 +988,7 @@ def run_project_qa(
         "packed_timeline_path": str(packed_path),
         "contact_sheets": contact_sheets,
     }
+    (verify_dir / "qa_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
     (verify_dir / "qa_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report

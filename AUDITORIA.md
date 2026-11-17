@@ -148,5 +148,18 @@ O sistema possui uma base funcional robusta para pesquisa de radar, corte de tra
 2. **Resiliência de Execução:** Ausência de fila de jobs com recuperação de falhas e persistência sem gravação atômica.
 3. **Refinamento Audiovisual:** Ducking de áudio estático (sem sidechain) e enquadramentos verticais fixos.
 
-> [!IMPORTANT]
-> **Aprovação Necessária:** Nenhuma linha do código de aplicação foi alterada nesta etapa. Este relatório `AUDITORIA.md` aguarda sua revisão e aprovação formal para que possamos iniciar a **Etapa 1 (Tarefa 1.1 — Procedência e licença das mídias)**.
+---
+
+## 9. Histórico de Execução das Etapas
+
+- **Etapa 0 (Auditoria & Docs):** Relatório inicial consolidado e suíte de testes estabelecida.
+- **Etapa 1 (Correções Rápidas C-01 a C-15):** DefusedXML, normalização de caminhos, locks de escrita, rate limiting e tolerância a falhas.
+- **Etapa 2 (Confiabilidade Editorial e Gate de Direitos):** Catálogo de procedência de mídias (`media_catalog.json`), gate bloqueante de direitos autorais para projetos comerciais, e 4 classes de confiabilidade de pautas (`confirmado`, `reportado`, `rumor`, `nao_verificado`).
+- **Etapa 3 (Motor de Roteiros e Duração Real):** 4 arquétipos narrativos virais (`noticia`, `curiosidade`, `teoria_rumor`, `polemica`), CTAs dinâmicos, e teto estrito de 58,0 s com ajuste de velocidade e corte de pausas sem truncar frases.
+- **Etapa 4 (Vídeo, Áudio e Uso Transformativo):** Seleção semântica de trechos de trailer ($\le 6.0$s), sidechain ducking com `sidechaincompress`, 3 modos de enquadramento (`crop_center`, `crop_focus`, `blur_fill`) e Ken Burns exato.
+- **Etapa 5 (Fila de Jobs, Safe Zones e QA Objetivo):**
+  - **Fila Sequencial (Tarefa 4.2):** `JobQueueManager` em `app/job_queue.py` executando jobs 1 por vez para eliminar sobrecarga de CPU/disco, com 5 estágios (`pesquisa`, `roteiro`, `tts`, `render`, `qa`), isolamento de erros por job e retomada incremental sem reprocessar etapas concluídas.
+  - **Critérios Objetivos de QA (Tarefa 4.3):** Checklist de 15 verificações em 4 categorias (`tecnica`, `narrativa`, `visual`, `editorial`), com status `aprovado`, `reprovado`, `nao_se_aplica`. Veredito "Pronto" para vídeos aprovados em técnica e narrativa, e "Pronto com Ressalvas (Requer Confirmação Editorial)" quando houver alertas ou pautas não verificadas.
+  - **Safe Zones (Tarefa 4.4):** Limites verticais (`SAFE_ZONE_TOP_PX=250`, `SAFE_ZONE_BOTTOM_PX=320`, `SAFE_ZONE_LEFT_PX=60`, `SAFE_ZONE_RIGHT_PX=60`) configuráveis e respeitados em legendas ASS e overlays visuais.
+  - **Legendas por Palavra (Tarefa 3.4):** Sincronização via `WordBoundary` do Edge-TTS com realce de termos-chave e margens adaptadas ao layout do YouTube Shorts.
+  - **Ambiente & Ferramentas:** Verificação de FFmpeg e filtros na inicialização (`verify_ffmpeg_installation()`), dependências congeladas em `requirements-lock.txt` testadas no Python 3.14.7, e esclarecimento de arquitetura "local-first, serviços externos opcionais".

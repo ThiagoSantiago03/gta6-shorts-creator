@@ -137,6 +137,7 @@ class ShortsProject(BaseModel):
     data_publicacao: str = ""
     fact_confidence: str = "Notícia / Imprensa"
     status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
+    confidence_status: str = ""
     max_duration_sec: float = 58.0
     max_continuous_trailer_sec: float = 6.0
     speech_rate: str = "+14%"
@@ -246,6 +247,7 @@ class CreateProjectRequest(BaseModel):
     data_publicacao: str = ""
     fact_confidence: str = "Notícia / Imprensa"
     status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
+    confidence_status: str = ""
     max_duration_sec: float = 58.0
     max_continuous_trailer_sec: float = 6.0
     speech_rate: str = "+14%"

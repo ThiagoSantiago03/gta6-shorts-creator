@@ -13,3 +13,4 @@ inputs/*
 *.wav
 *.bak
 *.tmp*
+verify/

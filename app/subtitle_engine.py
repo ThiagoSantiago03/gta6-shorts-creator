@@ -4,6 +4,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app.config import (
+    SAFE_ZONE_BOTTOM_PX,
+    SAFE_ZONE_LEFT_PX,
+    SAFE_ZONE_RIGHT_PX,
+    SAFE_ZONE_TOP_PX,
+)
 from app.models import SceneItem, WordTiming
 
 
@@ -102,12 +108,13 @@ def generate_ass_subtitles(
         margin_v = 430
         words_per_chunk = 3
 
-    margin_l = 64
-    margin_r = 64
+    margin_v = max(margin_v, SAFE_ZONE_BOTTOM_PX + 90)
+    margin_l = max(64, SAFE_ZONE_LEFT_PX)
+    margin_r = max(64, SAFE_ZONE_RIGHT_PX + 4)
     if safe_zone == "youtube_shorts" or subtitle_style == "vice_city":
-        margin_v = max(margin_v, 485)
-        margin_l = 72
-        margin_r = 108  # Clears YouTube Shorts / TikTok right-edge Like/Comment/Share column
+        margin_v = max(margin_v, SAFE_ZONE_BOTTOM_PX + 120, 485)
+        margin_l = max(72, SAFE_ZONE_LEFT_PX + 12)
+        margin_r = max(108, SAFE_ZONE_RIGHT_PX + 48)  # Clears YouTube Shorts / TikTok right-edge Like/Comment/Share column
 
     header = f"""[Script Info]
 ScriptType: v4.00+

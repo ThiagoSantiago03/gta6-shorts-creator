@@ -24,7 +24,12 @@ from app.audio_processor import (
     prepare_reel2_music_clip,
     snap_durations_to_beats,
 )
-from app.config import get_ffmpeg_exe, get_gemini_api_key
+from app.config import (
+    SAFE_ZONE_BOTTOM_PX,
+    SAFE_ZONE_TOP_PX,
+    get_ffmpeg_exe,
+    get_gemini_api_key,
+)
 from app.gaming_media import auto_select_gaming_soundtrack, prepare_gaming_project_visuals
 from app.gaming_scriptwriter import enforce_script_duration_budget
 from app.html_renderer import (
@@ -706,7 +711,8 @@ def _build_track_hud_overlay(
     canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
-    pill_y = 148 if overlay_style == "clean_reels" else 344
+    # Respeita Safe Zone superior (SAFE_ZONE_TOP_PX = 250px) para não colidir com header do YouTube Shorts
+    pill_y = max(SAFE_ZONE_TOP_PX + 12, 148 if overlay_style == "clean_reels" else 344)
     f_pill = _load_font(22, bold=True)
     pb = draw.textbbox((0, 0), pill_text, font=f_pill)
     pw = (pb[2] - pb[0]) + 46
@@ -993,14 +999,16 @@ def _build_cover_and_bg(
 
     pb = draw.textbbox((0, 0), pill_txt, font=f_badge)
     pw = (pb[2] - pb[0]) + 52
+    py0 = max(SAFE_ZONE_TOP_PX + 12, 165)
+    py1 = py0 + 50
     draw.rounded_rectangle(
-        ((W - pw) // 2, 165, (W + pw) // 2, 215),
+        ((W - pw) // 2, py0, (W + pw) // 2, py1),
         radius=25,
         fill=(24, 24, 30, 220),
         outline=(accent[0], accent[1], accent[2], 210),
         width=2,
     )
-    draw.text((W // 2, 190), pill_txt, fill=(255, 255, 255, 245), font=f_badge, anchor="mm")
+    draw.text((W // 2, py0 + 25), pill_txt, fill=(255, 255, 255, 245), font=f_badge, anchor="mm")
 
     title_str = (project.reel2_title or f"{project.song_title}").strip()
     sub_str = (project.reel2_subtitle or f"{project.artist} • {project.year}").strip(" •")
@@ -2626,9 +2634,9 @@ def render_gaming_youtube_short(
     )
     project.outputs.update(qa_report.get("contact_sheets", {}))
     project.qa_report = qa_report
-    qa_tag = "QA OK" if qa_report.get("qa_passed") else "QA Atenção"
+    qa_verdict = qa_report.get("verdict") or ("Pronto" if qa_report.get("qa_passed") else "QA Atenção")
     dur_measured = qa_report.get("probes", {}).get("youtube_short", {}).get("duration_sec", round(total_dur, 1))
-    project.status = f"rendered ({actual_tts} @ {cur_rate} • Short {dur_measured}s • {qa_tag})"
+    project.status = f"rendered ({actual_tts} @ {cur_rate} • Short {dur_measured}s • {qa_verdict})"
     return project
 
 

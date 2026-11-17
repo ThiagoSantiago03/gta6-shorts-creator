@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import logging
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 
 logger = logging.getLogger("gta6_config")
@@ -92,3 +94,44 @@ def get_ffmpeg_exe() -> str:
             "FFmpeg não encontrado no sistema nem via imageio-ffmpeg. "
             "Instale com: pip install imageio-ffmpeg"
         ) from exc
+
+
+# Safe Zones para YouTube Shorts vertical (1080x1920) — Tarefa 4.4
+SAFE_ZONE_TOP_PX: int = int(os.getenv("SAFE_ZONE_TOP_PX", "250"))
+SAFE_ZONE_BOTTOM_PX: int = int(os.getenv("SAFE_ZONE_BOTTOM_PX", "320"))
+SAFE_ZONE_LEFT_PX: int = int(os.getenv("SAFE_ZONE_LEFT_PX", "60"))
+SAFE_ZONE_RIGHT_PX: int = int(os.getenv("SAFE_ZONE_RIGHT_PX", "60"))
+
+
+def get_safe_zones() -> dict[str, int]:
+    """Retorna os limites configuráveis da zona segura em pixels para 1080x1920."""
+    return {
+        "top": int(os.getenv("SAFE_ZONE_TOP_PX", str(SAFE_ZONE_TOP_PX))),
+        "bottom": int(os.getenv("SAFE_ZONE_BOTTOM_PX", str(SAFE_ZONE_BOTTOM_PX))),
+        "left": int(os.getenv("SAFE_ZONE_LEFT_PX", str(SAFE_ZONE_LEFT_PX))),
+        "right": int(os.getenv("SAFE_ZONE_RIGHT_PX", str(SAFE_ZONE_RIGHT_PX))),
+    }
+
+
+def verify_ffmpeg_installation() -> dict[str, Any]:
+    """Verifica se o FFmpeg está instalado e possui os filtros essenciais para o pipeline."""
+    exe = get_ffmpeg_exe()
+    try:
+        proc = subprocess.run([exe, "-version"], capture_output=True, text=True, check=True)
+        version_line = proc.stdout.splitlines()[0] if proc.stdout else "unknown"
+        filters_proc = subprocess.run([exe, "-filters"], capture_output=True, text=True)
+        filters_txt = filters_proc.stdout.lower()
+        required_filters = ["loudnorm", "sidechaincompress", "scale", "crop", "ass"]
+        missing = [f for f in required_filters if f not in filters_txt]
+        if missing:
+            logger.warning("FFmpeg detectado (%s), mas filtros ausentes: %s", exe, missing)
+        return {
+            "path": exe,
+            "version": version_line,
+            "ok": len(missing) == 0,
+            "missing_filters": missing,
+        }
+    except Exception as exc:
+        logger.error("Erro na verificação do FFmpeg em '%s': %s", exe, exc)
+        raise RuntimeError(f"FFmpeg inválido ou não executável em '{exe}': {exc}") from exc
+
