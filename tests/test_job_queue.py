@@ -203,3 +203,54 @@ def test_jobs_dir_is_absolute_and_independent_of_cwd(tmp_path: Path, monkeypatch
     assert JOBS_DIR.resolve() == resolved_before
 
 
+def test_pesquisa_editorial_verification_rules(tmp_path: Path):
+    """T8: Etapa pesquisa bloqueia pauta sem status (ou nao_verificado) sem manual_approved e exige url/source em rumor/reportado."""
+    from app.job_queue import setup_production_stage_handlers
+
+    mgr = JobQueueManager(storage_dir=tmp_path / "jobs", auto_start_worker=False)
+    setup_production_stage_handlers(mgr)
+    # Substitui etapas posteriores por no-op para testar apenas a etapa pesquisa
+    for st in STAGE_NAMES[1:]:
+        mgr.register_stage_handler(st, lambda j: None)
+
+    j_no_status = mgr.create_job("Pauta sem classificação", input_data={})
+    j_manual_ok = mgr.create_job("Pauta sem classificação aprovada", input_data={"manual_approved": True})
+    j_rumor_no_src = mgr.create_job(
+        "Suposto vazamento sem fonte",
+        input_data={"status_confiabilidade": "rumor"},
+    )
+    j_rumor_with_src = mgr.create_job(
+        "Suposto vazamento com fonte",
+        input_data={"status_confiabilidade": "rumor", "source": "Bloomberg"},
+    )
+    j_reportado_no_src = mgr.create_job(
+        "Matéria reportada sem link",
+        input_data={"status_confiabilidade": "reportado"},
+    )
+
+    mgr.start_worker()
+    mgr._queue.join()
+    mgr.stop_worker()
+
+    res_no_status = mgr.get_job(j_no_status.id)
+    assert res_no_status.status == "erro"
+    assert res_no_status.stages["pesquisa"]["status"] == "erro"
+    assert "Pauta não verificada: aprove manualmente para produzir." in (res_no_status.error_message or "")
+
+    res_manual = mgr.get_job(j_manual_ok.id)
+    assert res_manual.status == "ok"
+    assert res_manual.stages["pesquisa"]["status"] == "ok"
+
+    res_rumor_fail = mgr.get_job(j_rumor_no_src.id)
+    assert res_rumor_fail.status == "erro"
+    assert res_rumor_fail.stages["pesquisa"]["status"] == "erro"
+
+    res_rumor_ok = mgr.get_job(j_rumor_with_src.id)
+    assert res_rumor_ok.status == "ok"
+
+    res_rep_fail = mgr.get_job(j_reportado_no_src.id)
+    assert res_rep_fail.status == "erro"
+    assert res_rep_fail.stages["pesquisa"]["status"] == "erro"
+
+
+

@@ -339,10 +339,38 @@ def setup_production_stage_handlers(manager: JobQueueManager) -> None:
     from app.web_server import _save_project, _load_project, _project_dir, _slugify, OUTPUTS_DIR
 
     def _pesquisa(job: JobItem) -> None:
-        # Research is provided or validated
-        if not job.topic_title:
+        if not (job.topic_title or "").strip():
+            job.logs.append(f"[{_now_iso()}] Pesquisa reprovada: pauta sem título.")
             raise ValueError("Pauta sem título informado.")
-        job.logs.append(f"[{_now_iso()}] Pauta validada: '{job.topic_title}'.")
+
+        raw_status = str(job.input_data.get("status_confiabilidade") or "").strip().lower()
+        status = (
+            raw_status
+            if raw_status in ("confirmado", "reportado", "rumor", "nao_verificado")
+            else "nao_verificado"
+        )
+        manual_approved = job.input_data.get("manual_approved") is True
+        url = str(job.input_data.get("url") or "").strip()
+        source = str(job.input_data.get("source") or "").strip()
+
+        if status == "nao_verificado":
+            if not manual_approved:
+                msg = "Pauta não verificada: aprove manualmente para produzir."
+                job.logs.append(f"[{_now_iso()}] Pesquisa bloqueada (status='{status}', manual_approved=False): {msg}")
+                raise ValueError(msg)
+            job.logs.append(
+                f"[{_now_iso()}] Pauta '{job.topic_title}' (nao_verificado) liberada via aprovação manual."
+            )
+        elif status in ("reportado", "rumor"):
+            if not url and not source:
+                msg = f"Pauta com status '{status}' exige 'url' ou 'source' registrados."
+                job.logs.append(f"[{_now_iso()}] Pesquisa bloqueada: {msg}")
+                raise ValueError(msg)
+            job.logs.append(
+                f"[{_now_iso()}] Pauta '{job.topic_title}' ({status}) validada com fonte '{source or url}'."
+            )
+        else:
+            job.logs.append(f"[{_now_iso()}] Pauta '{job.topic_title}' (confirmado) validada.")
 
     def _roteiro(job: JobItem) -> None:
         # Idempotência: se uma execução anterior já criou o projeto e ele existe, reaproveita sem criar órfão
@@ -394,7 +422,7 @@ def setup_production_stage_handlers(manager: JobQueueManager) -> None:
             fonte_primaria=job.input_data.get("source", ""),
             data_publicacao=job.input_data.get("published_at", ""),
             fact_confidence=job.input_data.get("confidence", "Notícia / Imprensa"),
-            status_confiabilidade=job.input_data.get("status_confiabilidade", "reportado"),
+            status_confiabilidade=job.input_data.get("status_confiabilidade") or "nao_verificado",
             publish_intent=job.input_data.get("publish_intent", "commercial"),
             max_duration_sec=58.0,
             speech_rate="+14%",

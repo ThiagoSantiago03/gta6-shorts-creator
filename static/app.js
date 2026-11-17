@@ -481,21 +481,62 @@ function renderRadarGrid() {
   RADAR_TOPICS.forEach((item, idx) => {
     const card = document.createElement("div");
     card.className = "radar-card";
+    const stConf = item.status_confiabilidade || "nao_verificado";
+    const isUnverified = stConf === "nao_verificado";
     card.innerHTML = `
       <div class="radar-card-top">
         <span class="radar-score">🔥 ${item.trend_score || 85} pts</span>
-        <span class="radar-source">${escapeHtml(item.source || "Notícia")}</span>
+        <span class="radar-source">${escapeHtml(item.source || "Notícia")} • ${escapeHtml(stConf)}</span>
       </div>
       <h4 class="radar-title">${escapeHtml(item.title)}</h4>
       <p class="radar-summary">${escapeHtml(item.summary || "")}</p>
       ${item.suggested_angle ? `<div class="radar-angle">💡 Ângulo: ${escapeHtml(item.suggested_angle)}</div>` : ""}
-      <div class="radar-actions">
+      ${isUnverified ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0;color:#fde68a;"><input type="checkbox" class="manual-approve-chk" data-idx="${idx}" /> Aprovar manualmente para a fila</label>` : ""}
+      <div class="radar-actions" style="display:flex;gap:6px;flex-wrap:wrap;">
         <button type="button" class="btn btn-primary btn-sm use-pauta-btn" data-idx="${idx}">
           ⚡ Usar esta Pauta &amp; Criar Short
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm enqueue-pauta-btn" data-idx="${idx}">
+          📥 Enviar p/ Fila
         </button>
       </div>
     `;
     listEl.appendChild(card);
+  });
+
+  listEl.querySelectorAll(".enqueue-pauta-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const idx = parseInt(btn.getAttribute("data-idx"), 10);
+      const item = RADAR_TOPICS[idx];
+      if (!item) return;
+      const chk = listEl.querySelector(`.manual-approve-chk[data-idx="${idx}"]`);
+      const manualApproved = chk ? Boolean(chk.checked) : false;
+      const intentSelect = document.getElementById("publishIntentSelect");
+      const publishIntent = intentSelect?.value || "commercial";
+      try {
+        await api("/api/queue/jobs/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            publish_intent: publishIntent,
+            topics: [{
+              title: item.title,
+              suggested_angle: item.suggested_angle || "",
+              url: item.url || "",
+              source: item.source || "",
+              published_at: item.published_at || "",
+              confidence: item.confidence || "Notícia / Imprensa",
+              status_confiabilidade: item.status_confiabilidade || "nao_verificado",
+              manual_approved: manualApproved,
+              publish_intent: publishIntent,
+            }],
+          }),
+        });
+        showToast("Pauta enviada para a fila de produção!", "success");
+      } catch (err) {
+        showToast(`Erro ao enfileirar pauta: ${err.message}`, "error");
+      }
+    });
   });
 
   listEl.querySelectorAll(".use-pauta-btn").forEach((btn) => {
