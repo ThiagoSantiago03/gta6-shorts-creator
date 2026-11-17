@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Documento histórico: não descreve o estado atual.** Consulte ARCHITECTURE.md, ROADMAP.md e CHANGELOG.md na raiz do repositório.
+
 # AUDITORIA TÉCNICA DO PROJETO — GTA 6 SHORTS STUDIO
 **Data:** 16 de Novembro de 2026  
 **Repositório:** `D:\CriadorDeVideos`  

@@ -1052,7 +1052,7 @@ function setupStep3StudioHandlers() {
       const customPrompt = document.getElementById("liveActiveAiPromptInput")?.value.trim();
       genAiBtn.disabled = true;
       genAiBtn.textContent = "Gerando Imagem...";
-      showToast("Gerando ilustração IA no modelo Flux (Zero-API)...", "info");
+      showToast("Gerando ilustração IA no modelo Flux (Pollinations, sem chave de API)...", "info");
       try {
         const res = await api(`/api/projects/${CURRENT_PROJECT.id}/scenes/${LIVE_ACTIVE_SCENE_IDX}/generate-ai-overlay`, {
           method: "POST",

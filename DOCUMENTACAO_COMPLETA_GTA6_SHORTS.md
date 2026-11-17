@@ -1,9 +1,9 @@
 # 📚 DOCUMENTAÇÃO TÉCNICA E ARQUITETURAL COMPLETA — GTA 6 SHORTS STUDIO
 
-> **Fábrica Autônoma de YouTube Shorts sobre GTA 6 e Rockstar Games**  
-> **Formato:** 1080×1920 (9:16 Vertical) • **Teto de Duração:** $\le 58,0$ segundos (decisão editorial de retenção) • **Filosofia:** Sem API paga por padrão (Local-First com serviços externos opcionais) • **Locução:** Neural PT-BR com Timestamps de Palavras  
-> **Repositório:** `D:\CriadorDeVideos`  
-> **Última Atualização:** 16 de Novembro de 2026
+> **Nota:** Para a referência enxuta e atualizada do estado do código, consulte [ARCHITECTURE.md](ARCHITECTURE.md), [ROADMAP.md](ROADMAP.md) e [CHANGELOG.md](CHANGELOG.md).  
+> **Fábrica de YouTube Shorts sobre GTA 6 e Rockstar Games**  
+> **Formato:** 1080×1920 (9:16 Vertical) • **Teto de Duração:** $\le 58,0$ segundos • **Operação:** Sem chaves de API obrigatórias (serviços externos opcionais: Edge-TTS, Pollinations, Gemini) • **Locução:** Neural PT-BR com Timestamps de Palavras  
+> **Última Atualização:** 17 de Novembro de 2026
 
 ---
 
@@ -30,7 +30,7 @@ O **GTA 6 Shorts Studio** é uma plataforma desenvolvida para criação autônom
 
 ### Objetivos Chave:
 - **Produção em Escala:** Capacidade de gerar de 5 a 10 vídeos diários a partir de tendências reais de notícias e buscas.
-- **Filosofia Local-First / Zero-API:** O sistema opera com custo zero de infraestrutura e sem obrigação de chaves pagas de API:
+- **Sem Chaves de API Obrigatórias (Local-First, Serviços Externos Opcionais):** O sistema opera localmente com serviços externos opcionais gratuitos (Google Trends/News RSS, Microsoft Edge-TTS, Pollinations.ai) e suporte opcional à chave `GEMINI_API_KEY`:
   - Scrapers locais de RSS e notícias abertas;
   - Banco local de trailers oficiais cortados em alta definição (`inputs/gta6/*.mp4`);
   - Biblioteca local de trilhas sonoras synthwave/neon (`inputs/gta6/*.mp3`);
@@ -54,7 +54,7 @@ flowchart TD
 
 | Camada | Tecnologia / Biblioteca | Versão Alvo | Finalidade |
 | :--- | :--- | :--- | :--- |
-| **Linguagem & Runtime** | Python (CPython) | 3.14 (64-bit) | Execução de todo o backend, workers e scripts CLI. |
+| **Linguagem & Runtime** | Python (CPython) | 3.11, 3.12 e 3.14 (64-bit) | Execução de todo o backend, workers e scripts CLI (validado no CI). |
 | **Framework Web** | [FastAPI](https://fastapi.tiangolo.com/) | $\ge 0.115.0$ | Exposição das rotas REST assíncronas do estúdio. |
 | **Servidor ASGI** | [Uvicorn](https://www.uvicorn.org/) | $\ge 0.30.0$ | Servidor assíncrono para hosting local com `--reload`. |
 | **Tipagem e Schemas** | [Pydantic v2](https://docs.pydantic.dev/) | $\ge 2.7.0$ | Validação estrita de contratos de dados e serialização JSON. |

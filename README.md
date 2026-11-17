@@ -1,6 +1,6 @@
 # GTA 6 Shorts Studio — Fábrica de YouTube Shorts (1080×1920)
 
-Estúdio local-first focado em **GTA 6 e Rockstar Games** para canais de **YouTube Shorts** (5 etapas no painel Web), com preview em tempo real e operação **sem chaves de API obrigatórias (serviços externos opcionais: Edge-TTS, Pollinations, Gemini)**.
+Estúdio local-first focado em **GTA 6 e Rockstar Games** para canais de **YouTube Shorts** (**4 passos no painel Web** e **5 estágios na fila de produção**), com preview em tempo real e operação **sem chaves de API obrigatórias (serviços externos opcionais: Edge-TTS, Pollinations, Gemini)**.
 
 > 📖 **Arquitetura Atual:** [ARCHITECTURE.md](ARCHITECTURE.md)  
 > 🗺️ **Roadmap e Pendências:** [ROADMAP.md](ROADMAP.md)  

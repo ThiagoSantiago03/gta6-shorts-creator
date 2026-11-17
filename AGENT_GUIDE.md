@@ -1,12 +1,13 @@
 # Guia do Agente Diretor — GTA 6 Shorts Studio
 
 > Documento oficial de diretrizes e comandos para o agente de desenvolvimento e automação.
-> Foco: Produção autônoma e assistida de **YouTube Shorts sobre GTA 6 e Rockstar Games** (1080×1920 • $\le 58,0$ s • Sem API paga por padrão).
+> Foco: Produção autônoma e assistida de **YouTube Shorts sobre GTA 6 e Rockstar Games** (1080×1920 • $\le 58,0$ s • Sem chaves de API obrigatórias — serviços externos opcionais: Edge-TTS, Pollinations, Gemini).
 
 ---
 
 ## 0. Regras Obrigatórias de Trabalho (Não Negociáveis)
 
+0. **Não reimplemente o que já existe**: Antes de implementar qualquer melhoria, confira a seção "Já implementado" do `ARCHITECTURE.md` e o `git log`. Não reimplemente o que já existe.
 1. **Uma tarefa por vez**: Não inicie a tarefa seguinte sem a anterior ter testes passando e estar validada.
 2. **Sem decisões arquiteturais unilaterais**: Se uma tarefa exigir mudar a estrutura de pastas, trocar bibliotecas ou alterar o modelo de dados de forma incompatível, pare e pergunte ao usuário.
 3. **Não reescreva do zero**: Preserve o comportamento atual (FastAPI + FFmpeg + SPA em JS puro + processamento local). Refatore em incrementos pequenos.
@@ -14,13 +15,14 @@
 5. **O código é a fonte da verdade**: Não confie cegamente em documentações legadas. Verifique sempre a implementação real no código.
 6. **Nenhuma exceção engolida**: Todo `except` deve registrar log com contexto (`logging.warning/exception`); nunca use `except: pass`.
 7. **Compatibilidade Multiplataforma**: O projeto é testado em Windows e deve manter compatibilidade com Linux e macOS (caminhos com `Path`, sem barras invertidas fixas ou chamadas exclusivas de `.exe`).
-8. **Atualização contínua de documentação**: Ao concluir cada tarefa, atualize `DOCUMENTACAO_COMPLETA_GTA6_SHORTS.md` informando: arquivos alterados, testes adicionados e pendências/riscos.
+8. **Atualização contínua de documentação**: Ao concluir cada tarefa, atualize `ARCHITECTURE.md`, `ROADMAP.md` e `CHANGELOG.md` informando: arquivos alterados, testes adicionados e pendências/riscos.
 
 ---
 
 ## 1. Fluxo Operacional de Produção
 
-O pipeline de produção segue 5 etapas lineares e rastreáveis:
+- **Painel Web (`static/index.html`):** **4 passos visuais** (`1. Radar & Pauta` → `2. Roteiro & Locução` → `3. Cenas & Mídia` → `4. Render, QA & Entrega`).
+- **Fila de Produção em Lote (`app/job_queue.py`):** **5 estágios sequenciais** (`pesquisa` → `roteiro` → `tts` → `render` → `qa`):
 
 ```mermaid
 flowchart LR
