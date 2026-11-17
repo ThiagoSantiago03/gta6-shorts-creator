@@ -899,43 +899,28 @@ def assemble_interleaved_audio(
         music_bed_raw_wav = render_dir / "music_bed_raw.wav"
         _write_wav_stereo_float(music_bed_raw_wav, music_pcm, sample_rate=sr)
 
-        # Build smooth S-curve ducking envelope (no pumping between continuous sentences)
-        env = np.full(total_samples, full_level, dtype=np.float32)
-        for ist, iv_end, _ in speech_islands:
-            r_dn0 = max(0, int(round((ist - 0.28) * sr)))
-            r_dn1 = min(total_samples, int(round((ist + 0.04) * sr)))
-            if r_dn1 > r_dn0 and ist > 0.08:
-                u = np.linspace(0.0, 1.0, r_dn1 - r_dn0, dtype=np.float32)
-                ramp_dn = duck_level + (full_level - duck_level) * 0.5 * (1.0 + np.cos(np.pi * u))
-                env[r_dn0:r_dn1] = np.minimum(env[r_dn0:r_dn1], ramp_dn)
-
-            hold_start = r_dn1 if ist > 0.08 else max(0, int(round(ist * sr)))
-            hold_end = min(total_samples, int(round((iv_end + 0.04) * sr)))
-            if hold_end > hold_start:
-                env[hold_start:hold_end] = duck_level
-
-            if iv_end < total_dur - 0.25:
-                r_up0 = hold_end
-                r_up1 = min(total_samples, int(round((iv_end + 0.34) * sr)))
-                if r_up1 > r_up0:
-                    u = np.linspace(0.0, 1.0, r_up1 - r_up0, dtype=np.float32)
-                    ramp_up = duck_level + (full_level - duck_level) * 0.5 * (1.0 - np.cos(np.pi * u))
-                    env[r_up0:r_up1] = ramp_up
-
-        premix_pcm = narr_pcm * 0.94 + music_pcm * env[:, None]
-        premix_wav = render_dir / "_premix.wav"
-        _write_wav_stereo_float(premix_wav, premix_pcm, sample_rate=sr)
-
         mixed_wav = render_dir / "audio_mixed.wav"
         fade_out_st = max(0.5, total_dur - 1.6)
+
+        # Tarefa 3.3 — Mixagem profissional via sidechaincompress + loudnorm
+        filter_mix = (
+            f"[0:a][1:a]sidechaincompress=threshold=0.08:ratio=6:attack=20:release=320[ducked_bed];"
+            f"[1:a][ducked_bed]amix=inputs=2:duration=first:dropout_transition=0:weights=1.0 0.85[combined];"
+            f"[combined]afade=t=in:st=0:d=0.05,afade=t=out:st={fade_out_st:.2f}:d=1.6,"
+            f"loudnorm=I=-14:TP=-1.5:LRA=11,alimiter=limit=0.95[out]"
+        )
         res_mix = subprocess.run(
             [
                 ffmpeg,
                 "-y",
                 "-i",
-                str(premix_wav),
-                "-af",
-                f"afade=t=in:st=0:d=0.05,afade=t=out:st={fade_out_st:.2f}:d=1.6,loudnorm=I=-14:TP=-1.5:LRA=11,alimiter=limit=0.95",
+                str(music_bed_raw_wav),
+                "-i",
+                str(clean_wav),
+                "-filter_complex",
+                filter_mix,
+                "-map",
+                "[out]",
                 "-ar",
                 str(sr),
                 "-ac",
@@ -947,9 +932,8 @@ def assemble_interleaved_audio(
             capture_output=True,
             text=True,
         )
-        premix_wav.unlink(missing_ok=True)
         if res_mix.returncode != 0:
-            raise RuntimeError(f"Falha ao normalizar mix integrado: {res_mix.stderr[-400:]}")
+            raise RuntimeError(f"Falha ao normalizar mix integrado via sidechain: {res_mix.stderr[-400:]}")
 
     return {
         "mixed_wav": mixed_wav,

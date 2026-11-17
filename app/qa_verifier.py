@@ -592,6 +592,36 @@ def run_project_qa(
     is_blocked = len(blocking_reasons) > 0
     media_status = "blocked" if is_blocked else ("warning" if media_warnings else "ok")
 
+    # Tarefa 1.2 — Verificação de Uso Transformativo dos Trailers
+    max_trailer_sec = float(getattr(project, "max_continuous_trailer_sec", 6.0) or 6.0)
+    transformative_trailer_issues: list[str] = []
+
+    trailer_cuts_used = set()
+    total_video_scenes = 0
+
+    for sc in getattr(project, "scenes", []):
+        vp = getattr(sc, "video_path", None)
+        if vp and Path(vp).exists() and getattr(sc, "asset_type", "auto") == "video":
+            total_video_scenes += 1
+            vstart = float(getattr(sc, "video_start_sec", 0.0) or 0.0)
+            vend = float(getattr(sc, "video_end_sec", 0.0) or 0.0)
+
+            trailer_cuts_used.add(f"{Path(vp).name}@{vstart:.1f}")
+
+            if vend > vstart and (vend - vstart) > max_trailer_sec + 0.15:
+                transformative_trailer_issues.append(
+                    f"Cena {sc.index}: trecho contínuo de trailer excede {max_trailer_sec:.1f}s ({vend - vstart:.1f}s)."
+                )
+
+    if total_video_scenes >= 2 and len(trailer_cuts_used) == 1:
+        transformative_trailer_issues.append(
+            "Uso não-transformativo: o mesmo trecho de trailer é usado como fundo contínuo sem cortes entre as cenas."
+        )
+
+    if transformative_trailer_issues and "youtube_short" in probes:
+        probes["youtube_short"]["issues"].extend(transformative_trailer_issues)
+        probes["youtube_short"]["passed"] = False
+
     media_audit = {
         "status": media_status,
         "publish_intent": publish_intent,
@@ -604,8 +634,9 @@ def run_project_qa(
     }
 
     report = {
-        "qa_passed": all_passed and risk.get("verdict") != "fail" and not is_blocked,
+        "qa_passed": all_passed and risk.get("verdict") != "fail" and not is_blocked and not transformative_trailer_issues,
         "slideshow_risk": risk,
+        "transformative_trailer_issues": transformative_trailer_issues,
         "probes": probes,
         "media_audit": media_audit,
         "packed_timeline_path": str(packed_path),

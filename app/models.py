@@ -66,6 +66,8 @@ class SceneItem(BaseModel):
     image_path: str | None = None
     video_path: str | None = None
     video_start_sec: float = 0.0
+    video_end_sec: float | None = None
+    clip_reason: str = ""
     media_id: str | None = None
     media_source: str = ""
     framing_mode: Literal["crop_center", "crop_focus", "blur_fill"] = "crop_center"
@@ -136,6 +138,7 @@ class ShortsProject(BaseModel):
     fact_confidence: str = "Notícia / Imprensa"
     status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
     max_duration_sec: float = 58.0
+    max_continuous_trailer_sec: float = 6.0
     speech_rate: str = "+14%"
     viral_archetype: str = "auto"
     hook_title: str = ""
@@ -244,6 +247,7 @@ class CreateProjectRequest(BaseModel):
     fact_confidence: str = "Notícia / Imprensa"
     status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
     max_duration_sec: float = 58.0
+    max_continuous_trailer_sec: float = 6.0
     speech_rate: str = "+14%"
     viral_archetype: str = "auto"
     niche: Literal["music_history", "gaming_news"] = "gaming_news"

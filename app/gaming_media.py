@@ -1010,6 +1010,130 @@ def _collect_library_trailer_cuts(project: MusicStoryProject, max_clips_per_vide
     return interleaved
 
 
+_THEME_KEYWORDS: dict[str, list[str]] = {
+    "policia": ["polícia", "policia", "k9", "procurado", "tiro", "combate", "perseguição", "perseguicao", "assalto", "crime", "fuga", "sirene", "viatura"],
+    "lucia_jason": ["lucia", "jason", "casal", "protagonista", "personagem", "prisão", "prisao", "dupla", "loja", "protagonistas"],
+    "mapa_mundo": ["mapa", "leonida", "vice city", "cidade", "mundo aberto", "locais", "região", "praia", "rua", "metrópole", "highway"],
+    "agua_pantano": ["água", "agua", "física", "fisica", "barco", "lancha", "pântano", "pantano", "animais", "natureza", "jacaré", "mar"],
+    "vida_noturna": ["boate", "festa", "música", "vida noturna", "interiores", "luxo", "cobertura", "balada", "clube"],
+    "npcs_multidao": ["npcs", "multidão", "multidao", "banhistas", "vida", "densidade", "inteligência artificial", "ia"],
+    "tecnologia_graficos": ["60 fps", "fps", "gráficos", "graficos", "ps5", "xbox", "pc", "tecnologia", "rage", "engine", "console", "iluminação"],
+    "oficial_anuncio": ["oficial", "confirmado", "rockstar", "take-two", "data", "lançamento", "lancamento", "trailer", "anúncio", "revelação", "capa", "edição", "preço", "custo"],
+}
+
+
+def _infer_trailer_cut_tags(cut: dict[str, Any]) -> set[str]:
+    name = str(cut.get("clip_name") or cut.get("clip_path") or "").lower()
+    label = str(cut.get("label") or "").lower()
+    start_sec = float(cut.get("start_sec") or 0.0)
+    tags: set[str] = set()
+
+    if "trailer 1" in name:
+        if start_sec < 5.0:
+            tags.update(["lucia_jason", "prisao"])
+        elif 5.0 <= start_sec < 10.0:
+            tags.update(["mapa_mundo"])
+        elif 10.0 <= start_sec < 16.0:
+            tags.update(["agua_pantano"])
+        elif 16.0 <= start_sec < 20.0:
+            tags.update(["npcs_multidao", "tecnologia_graficos"])
+        elif 20.0 <= start_sec < 25.0:
+            tags.update(["policia"])
+        elif 25.0 <= start_sec < 32.0:
+            tags.update(["vida_noturna"])
+        else:
+            tags.update(["lucia_jason"])
+    elif "revelacao" in name or "capa" in name:
+        tags.update(["oficial_anuncio", "tecnologia_graficos"])
+    elif "realista" in name:
+        tags.update(["tecnologia_graficos", "agua_pantano"])
+    elif "trailer 2" in name or "lançamento" in name or "lancamento" in name:
+        if start_sec < 12.0:
+            tags.update(["oficial_anuncio", "mapa_mundo"])
+        elif 12.0 <= start_sec < 24.0:
+            tags.update(["policia"])
+        else:
+            tags.update(["lucia_jason"])
+
+    for th, kws in _THEME_KEYWORDS.items():
+        if any(kw in label for kw in kws):
+            tags.add(th)
+
+    return tags
+
+
+def match_best_trailer_cut(
+    scene: SceneItem,
+    available_cuts: list[dict[str, Any]],
+    used_keys: set[str] | None = None,
+    max_continuous_sec: float = 6.0,
+) -> tuple[dict[str, Any] | None, str]:
+    """
+    Select the most semantically relevant, transformative trailer cut for a scene (Tarefa 1.2),
+    enforcing max continuous clip duration <= max_continuous_sec and generating a detailed reason.
+    """
+    if not available_cuts:
+        return None, ""
+
+    used_keys = used_keys or set()
+    scene_text = f"{scene.title} {scene.narration_text}".lower()
+
+    active_themes: list[str] = []
+    for theme, keywords in _THEME_KEYWORDS.items():
+        if any(kw in scene_text for kw in keywords):
+            active_themes.append(theme)
+
+    scored_cuts: list[tuple[float, dict[str, Any], list[str]]] = []
+    for cut in available_cuts:
+        ckey = f"{cut.get('clip_name') or cut.get('clip_path')}@{cut.get('start_sec')}"
+        cut_tags = _infer_trailer_cut_tags(cut)
+        matched = [t for t in active_themes if t in cut_tags]
+
+        base_score = _rate_cut_visual_quality(str(cut.get("thumb_path") or ""))
+        score = base_score + len(matched) * 15.0
+        if ckey in used_keys:
+            score -= 30.0
+        scored_cuts.append((score, cut, matched))
+
+    scored_cuts.sort(key=lambda x: x[0], reverse=True)
+    best_score, raw_cut, matched_themes = scored_cuts[0]
+
+    scene_dur = float(getattr(scene, "duration_sec", 0.0) or 5.0)
+    cut_dur = min(scene_dur, max_continuous_sec)
+    start_sec = float(raw_cut.get("start_sec") or 0.0)
+    end_sec = round(start_sec + cut_dur, 2)
+
+    res_cut = dict(raw_cut)
+    res_cut["end_sec"] = end_sec
+    res_cut["duration_sec"] = cut_dur
+
+    clip_name = raw_cut.get("clip_name") or Path(str(raw_cut.get("clip_path") or "")).name or "trailer"
+    if matched_themes:
+        theme_names = {
+            "policia": "perseguição policial",
+            "lucia_jason": "protagonistas Lucia e Jason",
+            "mapa_mundo": "mundo aberto e cidade de Vice City",
+            "agua_pantano": "física de água e áreas naturais",
+            "vida_noturna": "vida noturna e interiores",
+            "npcs_multidao": "densidade de NPCs e atmosfera urbana",
+            "tecnologia_graficos": "capacidade gráfica da engine",
+            "oficial_anuncio": "materiais de divulgação oficial",
+        }
+        human_themes = [theme_names.get(t, t) for t in matched_themes]
+        reason = (
+            f"Corte do trailer '{clip_name}' ({start_sec:.1f}s a {end_sec:.1f}s) "
+            f"selecionado por correspondência temática com '{', '.join(human_themes)}' "
+            f"na narração da cena."
+        )
+    else:
+        reason = (
+            f"Corte dinâmico do trailer '{clip_name}' ({start_sec:.1f}s a {end_sec:.1f}s) "
+            f"selecionado para ritmo visual e contextualização da cena."
+        )
+
+    return res_cut, reason
+
+
 def _short_overlay_badge_from_scene(scene: SceneItem) -> str:
     raw = re.sub(r"[^0-9A-Za-zÀ-ÿ\s•:/+\-$%]+", " ", (scene.title or "").strip())
     raw = re.sub(r"\s+", " ", raw).strip()
@@ -1139,25 +1263,33 @@ def auto_blend_gaming_clips_and_images(
                         break
 
             # Priority C: Moving video backfill from inputs/gta6/ trailers so static images are avoided whenever possible
+            max_cont_sec = float(getattr(project, "max_continuous_trailer_sec", 6.0) or 6.0)
+            scene_dur = float(getattr(scene, "duration_sec", 0.0) or 5.0)
+
             if picked_clip_path is None and interleaved_library:
-                picked_lib = None
-                for offset in range(len(interleaved_library)):
-                    cand_lib = interleaved_library[(idx * 2 + offset) % len(interleaved_library)]
-                    lkey = f"{cand_lib['clip_path']}@{cand_lib['start_sec']}"
-                    if lkey not in used_library_keys:
-                        picked_lib = cand_lib
-                        used_library_keys.add(lkey)
-                        break
-                if picked_lib is None:
-                    picked_lib = interleaved_library[idx % len(interleaved_library)]
-                lp = Path(str(picked_lib["clip_path"]))
-                if lp.exists():
-                    picked_clip_path = lp
-                    picked_start_sec = float(picked_lib["start_sec"])
+                matched_cut, reason = match_best_trailer_cut(
+                    scene=scene,
+                    available_cuts=interleaved_library,
+                    used_keys=used_library_keys,
+                    max_continuous_sec=max_cont_sec,
+                )
+                if matched_cut:
+                    lp = Path(str(matched_cut["clip_path"]))
+                    if lp.exists():
+                        picked_clip_path = lp
+                        picked_start_sec = float(matched_cut["start_sec"])
+                        picked_end_sec = float(matched_cut.get("end_sec") or (picked_start_sec + min(scene_dur, max_cont_sec)))
+                        used_library_keys.add(f"{matched_cut['clip_path']}@{matched_cut['start_sec']}")
+                        scene.clip_reason = reason
+                        scene.video_end_sec = picked_end_sec
 
             if picked_clip_path and picked_clip_path.exists():
                 scene.video_path = str(picked_clip_path)
                 scene.video_start_sec = float(picked_start_sec)
+                if not getattr(scene, "video_end_sec", None):
+                    scene.video_end_sec = round(picked_start_sec + min(scene_dur, max_cont_sec), 2)
+                if not getattr(scene, "clip_reason", ""):
+                    scene.clip_reason = f"Corte dinâmico de '{picked_clip_path.name}' ({scene.video_start_sec:.1f}s-{scene.video_end_sec:.1f}s) para a cena {scene.index}."
                 scene.asset_type = "video"
                 scene.html_path = None
                 extract_video_frame_thumb(picked_clip_path, out_png, seek_sec=scene.video_start_sec, vertical_9_16=True)
@@ -1167,6 +1299,12 @@ def auto_blend_gaming_clips_and_images(
 
         # Keep existing video thumb synced
         elif scene.video_path and Path(scene.video_path).exists():
+            scene_dur = float(getattr(scene, "duration_sec", 0.0) or 5.0)
+            max_cont_sec = float(getattr(project, "max_continuous_trailer_sec", 6.0) or 6.0)
+            if not getattr(scene, "video_end_sec", None):
+                scene.video_end_sec = round(float(getattr(scene, "video_start_sec", 0.0) or 0.0) + min(scene_dur, max_cont_sec), 2)
+            if not getattr(scene, "clip_reason", ""):
+                scene.clip_reason = f"Vídeo da cena {scene.index} ({Path(scene.video_path).name})."
             if not out_png.exists() or force_reassign:
                 extract_video_frame_thumb(
                     Path(scene.video_path),
@@ -1683,6 +1821,20 @@ def record_project_used_media(project: MusicStoryProject) -> list[dict[str, Any]
                 "usage_notes": entry.get("usage_notes", "Uso em corte de fundo vertical transformativo com locução.") if entry else "Mídia sem anotação prévia no catálogo.",
                 "scenes_used": [sc.index],
             })
+
+    for item in used:
+        if item.get("role") in ("scene_video", "scene_image"):
+            fn = item["filename"]
+            item["clip_details"] = [
+                {
+                    "scene_index": s.index,
+                    "start_sec": float(getattr(s, "video_start_sec", 0.0) or 0.0),
+                    "end_sec": float(getattr(s, "video_end_sec", 0.0) or 0.0) if getattr(s, "video_end_sec", None) is not None else None,
+                    "reason": getattr(s, "clip_reason", ""),
+                }
+                for s in project.scenes
+                if (s.video_path and Path(s.video_path).name == fn) or (s.image_path and Path(s.image_path).name == fn)
+            ]
 
     project.used_media = used
     return used

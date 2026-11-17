@@ -889,6 +889,29 @@ function setupStep3StudioHandlers() {
     });
   }
 
+  const framingSelect = document.getElementById("liveActiveFramingModeSelect");
+  const focusField = document.getElementById("liveActiveFocusXField");
+  const focusInput = document.getElementById("liveActiveFocusXInput");
+  const focusValEl = document.getElementById("liveActiveFocusXVal");
+  if (framingSelect) {
+    framingSelect.addEventListener("change", () => {
+      const sc = getActiveScene();
+      if (!sc) return;
+      sc.framing_mode = framingSelect.value;
+      if (focusField) focusField.classList.toggle("hidden", sc.framing_mode !== "crop_focus");
+      updateStudioInstantView();
+    });
+  }
+  if (focusInput) {
+    focusInput.addEventListener("input", () => {
+      const sc = getActiveScene();
+      if (!sc) return;
+      sc.focus_x = parseFloat(focusInput.value) || 0.5;
+      if (focusValEl) focusValEl.textContent = sc.focus_x.toFixed(2);
+      updateStudioInstantView();
+    });
+  }
+
   // Upload de vídeo personalizado para a cena ativa
   const vidUpload = document.getElementById("liveActiveVideoUploadInput");
   if (vidUpload) {
@@ -1060,6 +1083,8 @@ async function saveCurrentActiveScene() {
   const trailerVal = document.getElementById("liveActiveTrailerSelect")?.value;
   if (trailerVal) sc.video_path = trailerVal;
   sc.video_start_sec = parseFloat(document.getElementById("liveActiveVideoStartInput")?.value) || 0;
+  sc.framing_mode = document.getElementById("liveActiveFramingModeSelect")?.value || "crop_center";
+  sc.focus_x = parseFloat(document.getElementById("liveActiveFocusXInput")?.value) || 0.5;
   sc.overlay_label = document.getElementById("liveActiveOverlayLabelInput")?.value.trim().toUpperCase() || sc.overlay_label;
   sc.overlay_pos = document.getElementById("liveActiveOverlayPosSelect")?.value || "top_center";
   sc.ai_image_prompt = document.getElementById("liveActiveAiPromptInput")?.value.trim() || sc.ai_image_prompt;
@@ -1210,6 +1235,18 @@ function renderActiveSceneBox() {
   if (videoStartInput) {
     videoStartInput.value = sc.video_start_sec || 0;
   }
+
+  const framingSelect = document.getElementById("liveActiveFramingModeSelect");
+  if (framingSelect) {
+    framingSelect.value = sc.framing_mode || "crop_center";
+  }
+  const focusInput = document.getElementById("liveActiveFocusXInput");
+  const focusValEl = document.getElementById("liveActiveFocusXVal");
+  const focusField = document.getElementById("liveActiveFocusXField");
+  const curFx = sc.focus_x !== undefined && sc.focus_x !== null ? sc.focus_x : 0.5;
+  if (focusInput) focusInput.value = curFx;
+  if (focusValEl) focusValEl.textContent = Number(curFx).toFixed(2);
+  if (focusField) focusField.classList.toggle("hidden", (sc.framing_mode || "crop_center") !== "crop_focus");
 
   // 3. Toggles de Overlay
   const mode = sc.overlay_mode || (sc.overlay_image_path ? "matched_photo" : "none_motion_only");

@@ -347,6 +347,20 @@
                       </div>
                     </div>
                   </div>
+                  <div class="two-col-editor" style="margin-top:8px;">
+                    <div class="field">
+                      <small class="muted">Enquadramento Vertical (9:16)</small>
+                      <select id="liveActiveFramingModeSelect" class="editor-select">
+                        <option value="crop_center">Centralizado (Crop Center)</option>
+                        <option value="crop_focus">Foco Horizontal Customizado (Crop Focus)</option>
+                        <option value="blur_fill">Vídeo com Fundo Desfocado (Blur Fill)</option>
+                      </select>
+                    </div>
+                    <div id="liveActiveFocusXField" class="field hidden">
+                      <small class="muted">Ponto Focal Horizontal: <span id="liveActiveFocusXVal">0.50</span></small>
+                      <input type="range" id="liveActiveFocusXInput" min="0" max="1" step="0.05" value="0.5" class="editor-range" style="width:100%; margin-top:6px;" />
+                    </div>
+                  </div>
                 </div>
 
                 <!-- 3. OVERLAY / IMAGEM DA CENA -->

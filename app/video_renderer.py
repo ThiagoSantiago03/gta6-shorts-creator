@@ -225,11 +225,14 @@ def _render_scene_video_clip(
     accent_color: str,
     seek_sec: float = 0.0,
     hud_overlay_png: Path | None = None,
+    framing_mode: str = "crop_center",
+    focus_x: float = 0.5,
 ) -> Path:
     """
-    Format an Archive.org / band / stock MP4 clip to crisp 1080x1920@30fps
-    with blurred atmospheric full-bleed backdrop + sharp framed center, style grade,
-    and optional lower music HUD overlay.
+    Format an Archive.org / band / stock / trailer MP4 clip to crisp 1080x1920@30fps supporting:
+    - crop_center: 9:16 full-bleed fill with center crop
+    - crop_focus: 9:16 full-bleed fill with horizontal focus_x point (0.0=left, 1.0=right)
+    - blur_fill: atmospheric blurred backdrop + sharp 16:9 framed center
     """
     ffmpeg = get_ffmpeg_exe()
     r, g, b = _hex_to_rgb(accent_color)
@@ -248,23 +251,52 @@ def _render_scene_video_clip(
         use_loop = False
 
     has_hud = bool(hud_overlay_png and hud_overlay_png.exists())
-    if has_hud:
-        filter_complex = (
-            f"[0:v]fps={FPS},split=2[bg_src][fg_src];"
-            f"[bg_src]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-            f"gblur=sigma=26,eq=brightness=-0.18:saturation=0.7[bg];"
-            f"[fg_src]scale={W}:-2:force_original_aspect_ratio=decrease,{grade}[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2-30[comp];"
-            f"[comp][1:v]overlay=0:0,format=yuv420p[v]"
-        )
-    else:
-        filter_complex = (
-            f"[0:v]fps={FPS},split=2[bg_src][fg_src];"
-            f"[bg_src]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-            f"gblur=sigma=26,eq=brightness=-0.18:saturation=0.7[bg];"
-            f"[fg_src]scale={W}:-2:force_original_aspect_ratio=decrease,{grade}[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2-30,format=yuv420p[v]"
-        )
+    mode = framing_mode or "crop_center"
+
+    if mode == "blur_fill":
+        if has_hud:
+            filter_complex = (
+                f"[0:v]fps={FPS},split=2[bg_src][fg_src];"
+                f"[bg_src]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                f"gblur=sigma=26,eq=brightness=-0.18:saturation=0.7[bg];"
+                f"[fg_src]scale={W}:-2:force_original_aspect_ratio=decrease,{grade}[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2-30[comp];"
+                f"[comp][1:v]overlay=0:0,format=yuv420p[v]"
+            )
+        else:
+            filter_complex = (
+                f"[0:v]fps={FPS},split=2[bg_src][fg_src];"
+                f"[bg_src]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                f"gblur=sigma=26,eq=brightness=-0.18:saturation=0.7[bg];"
+                f"[fg_src]scale={W}:-2:force_original_aspect_ratio=decrease,{grade}[fg];"
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2-30,format=yuv420p[v]"
+            )
+    elif mode == "crop_focus":
+        fx = max(0.0, min(1.0, float(focus_x if focus_x is not None else 0.5)))
+        x_expr = f"(in_w-{W})*{fx:.3f}"
+        if has_hud:
+            filter_complex = (
+                f"[0:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
+                f"crop={W}:{H}:{x_expr}:(in_h-{H})/2,{grade}[base];"
+                f"[base][1:v]overlay=0:0,format=yuv420p[v]"
+            )
+        else:
+            filter_complex = (
+                f"[0:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
+                f"crop={W}:{H}:{x_expr}:(in_h-{H})/2,{grade},format=yuv420p[v]"
+            )
+    else:  # "crop_center" default
+        if has_hud:
+            filter_complex = (
+                f"[0:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
+                f"crop={W}:{H}:(in_w-{W})/2:(in_h-{H})/2,{grade}[base];"
+                f"[base][1:v]overlay=0:0,format=yuv420p[v]"
+            )
+        else:
+            filter_complex = (
+                f"[0:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
+                f"crop={W}:{H}:(in_w-{W})/2:(in_h-{H})/2,{grade},format=yuv420p[v]"
+            )
 
     cmd = [ffmpeg, "-y"]
     if use_loop:
@@ -2422,6 +2454,8 @@ def render_gaming_youtube_short(
                         seg_mp4,
                         project.accent_color,
                         seek_sec=float(getattr(sc, "video_start_sec", 0.0) or 0.0),
+                        framing_mode=getattr(sc, "framing_mode", "crop_center") or "crop_center",
+                        focus_x=float(getattr(sc, "focus_x", 0.5) if getattr(sc, "focus_x", None) is not None else 0.5),
                     )
                     vseg["media_source"] = f"video:{Path(sc.video_path).name}"
                 sc.asset_type = "video"
@@ -2435,6 +2469,8 @@ def render_gaming_youtube_short(
                         seg_mp4,
                         project.accent_color,
                         seek_sec=float(getattr(sc, "video_start_sec", 0.0) or 0.0),
+                        framing_mode=getattr(sc, "framing_mode", "crop_center") or "crop_center",
+                        focus_x=float(getattr(sc, "focus_x", 0.5) if getattr(sc, "focus_x", None) is not None else 0.5),
                     )
                     sc.asset_type = "video"
                     vseg["media_source"] = f"video:{Path(sc.video_path).name}"

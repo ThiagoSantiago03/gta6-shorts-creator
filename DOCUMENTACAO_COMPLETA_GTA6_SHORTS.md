@@ -367,10 +367,10 @@ A tabela abaixo acompanha o status das tarefas planejadas em conjunto com ChatGP
 | **Tarefa 1.3** | Confiabilidade da Notícia (Rumor vs Fato) | **Concluída** | Modelo de 4 classes (`confirmado`, `reportado`, `rumor`, `nao_verificado`), sanitização de afirmações categóricas em rumores, e filtro que pula pautas não verificadas em lotes diários. |
 | **Tarefa 2.1** | Arquétipos Narrativos de Roteiro | **Concluída** | 4 arquétipos canônicos (`noticia`, `curiosidade`, `teoria_rumor`, `polemica_comparacao`), estrutura dinâmica de 4 a 5 cenas, e CTAs variados por tema sem fórmula fixa A vs B. |
 | **Tarefa 2.2** | Duração Real do Áudio (<= 58.0s) | **Concluída** | Medição da duração real concatenada de cada cena com recálculo automático de velocidade TTS (+12% a +28%), orçamento sintático proporcional de palavras e gate rígido no QA reprovando Shorts > 58.0s. |
-| **Tarefa 1.2** | Uso Transformativo dos Trailers | *Pendente* | Limitar tempo contínuo de corte (máx 6s) e vincular contexto visual à fala. |
-| **Tarefa 3.3** | Mixagem de Áudio com Sidechain | *Pendente* | Trocar volume estático por `sidechaincompress` e normalização `loudnorm`. |
-| **Tarefa 3.1** | Enquadramentos Verticais (Blur-Fill) | *Pendente* | Modos `crop_center`, `crop_focus` e `blur_fill` configuráveis por cena. |
-| **Tarefa 3.2** | Ken Burns Controlado | *Pendente* | Substituir `d=99999` por duração real (`duração × fps`). |
+| **Tarefa 1.2** | Uso Transformativo dos Trailers | **Concluída** | Limitação de corte contínuo ($\le 6.0$s), correspondência temática inteligente por tema/fala, registro de `clip_reason` e `clip_details`, e gate de QA contra repetição contínua. |
+| **Tarefa 3.3** | Mixagem de Áudio com Sidechain | **Concluída** | Ducking via `sidechaincompress` (trilha atenua dinamicamente na voz), equalização master com `loudnorm=I=-14:TP=-1.5:LRA=11` e controle de True Peak no QA. |
+| **Tarefa 3.1** | Enquadramentos Verticais (Blur-Fill) | **Concluída** | Modos `crop_center`, `crop_focus` (com `focus_x` de 0.0 a 1.0) e `blur_fill` configuráveis por cena no backend e expostos no editor da UI. |
+| **Tarefa 3.2** | Ken Burns Controlado | **Concluída** | Duração real e número de frames exatos calculados por cena (`d=n_frames`), sem d=99999 e com separação estrita dos fluxos de vídeo e imagem estática. |
 | **Tarefa 4.2** | Fila de Jobs em Lote com Recuperação | *Pendente* | Execução de lote com status por etapa e retomada de jobs que falharem. |
 | **Tarefas 4.3/4.4** | QA com Critérios Objetivos & Safe Zones | *Pendente* | Checklist formal aprovado/reprovado e margens para interface de celular. |
 | **Tarefa 3.4 / Etapa 5** | Legendas Word Boundaries & Ajustes | *Pendente* | Sincronia fina por palavra e padronização final. |
