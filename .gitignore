@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+projects/
+outputs/
+scratch/
+inputs/*
+!inputs/.gitkeep
+!inputs/media_catalog.json
+*.mp4
+*.mp3
+*.wav
+*.bak
+*.tmp*

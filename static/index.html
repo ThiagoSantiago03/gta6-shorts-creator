@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GTA 6 Shorts Studio — Automação YouTube Shorts</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff007f'/><text x='32' y='45' font-size='34' text-anchor='middle' fill='%2300f0ff'>VI</text></svg>" />
+  <link rel="stylesheet" href="/static/styles.css?v=2" />
+</head>
+<body data-niche="gaming_news">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon" id="brandIconBox">🎮</div>
+      <div>
+        <h1 id="brandTitleText">GTA 6 Shorts Studio</h1>
+        <p id="brandSubtitleText">Canal Automatizado YouTube Shorts (9:16 • &lt;= 58s) • Zero-API First</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="geminiStatusBadge" class="status-pill">Zero-API (Edge-TTS + Flux)</span>
+      <span id="browserStatusBadge" class="status-pill">Motor 9:16 Pronto</span>
+      <button type="button" id="batchDailyAutomationBtn" class="btn btn-primary btn-sm">⚡ Gerar 5 Shorts Hoje (Autônomo)</button>
+      <button type="button" id="openImportJsonModalBtn" class="btn btn-secondary btn-sm">Importar Roteiro JSON</button>
+      <button type="button" id="openKeyModalBtn" class="btn btn-secondary btn-sm">Chave Gemini (Opcional)</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Vídeos &amp; Projetos</h2>
+        <button type="button" id="newProjectNavBtn" class="btn btn-primary btn-sm">+ Novo Short</button>
+      </div>
+      <div class="sidebar-filter-tabs">
+        <button type="button" class="filter-tab-btn active" data-filter="all">Todos (<span id="filterCountAll">0</span>)</button>
+        <button type="button" class="filter-tab-btn" data-filter="pending">⏳ Pendentes (<span id="filterCountPending">0</span>)</button>
+        <button type="button" class="filter-tab-btn" data-filter="posted">✅ Postados (<span id="filterCountPosted">0</span>)</button>
+      </div>
+      <div id="projectsList" class="projects-list"></div>
+      <div class="sidebar-footer">
+        <small>Acervo local de trailers:<br /><code>inputs/gta6/</code></small>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <!-- 4-STEP STREAMLINED GTA SHORTS STEPPER -->
+      <nav class="stepper" id="wizardStepper" aria-label="Etapas de criação">
+        <button type="button" class="step-pill active" data-step="1">
+          <span class="step-num">1</span>
+          <span class="step-label">Pauta &amp; Notícia</span>
+        </button>
+        <button type="button" class="step-pill" data-step="2">
+          <span class="step-num">2</span>
+          <span class="step-label">Roteiro (58s)</span>
+        </button>
+        <button type="button" class="step-pill" data-step="3">
+          <span class="step-num">3</span>
+          <span class="step-label">Estúdio Visual 9:16</span>
+        </button>
+        <button type="button" class="step-pill" data-step="4">
+          <span class="step-num">4</span>
+          <span class="step-label">Gerar Shorts &amp; YouTube</span>
+        </button>
+      </nav>
+
+      <!-- ACTIVE PROJECT CONTEXT BAR -->
+      <div id="activeProjectBar" class="context-bar hidden">
+        <div class="context-bar-info">
+          <span class="tag-badge" id="projStatusBadge">draft</span>
+          <strong id="projHeaderTitle">GTA 6 — Novo Vídeo</strong>
+        </div>
+        <div class="context-bar-actions">
+          <button type="button" id="topbarTogglePostedBtn" class="btn btn-secondary btn-sm" title="Alternar status de postagem">
+            <span id="topbarPostedIcon">⏳</span> <span id="topbarPostedText">Marcar Postado</span>
+          </button>
+          <button type="button" id="saveProjectBtn" class="btn btn-secondary btn-sm">💾 Salvar</button>
+          <button type="button" id="viewPackedBtn" class="btn btn-secondary btn-sm">📋 JSON</button>
+          <button type="button" id="deleteProjectBtn" class="btn btn-danger btn-sm">🗑️ Excluir</button>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           ETAPA 1: PAUTA & NOTÍCIA DO DIA (RADAR GTA 6)
+           ========================================================= -->
+      <section id="step-1" class="step-panel active">
+        <div id="step1EditingBanner" class="banner-notice hidden">
+          <div>
+            <strong>Editando projeto: <span id="step1ActiveName"></span></strong>
+            <p class="muted">Você pode ajustar a pauta abaixo ou avançar direto para o roteiro e montagem.</p>
+          </div>
+          <div class="inline-pair">
+            <button type="button" id="step1StartFreshBtn" class="btn btn-secondary btn-sm">+ Criar Outro Short Novo</button>
+            <button type="button" class="btn btn-primary btn-sm" id="step1ContinueExistingBtn">Ir para Roteiro →</button>
+          </div>
+        </div>
+
+        <!-- RADAR AO VIVO GTA 6 -->
+        <div class="card vice-card">
+          <div class="card-head">
+            <div>
+              <h2>🔥 Radar de Notícias GTA 6 (Google Trends &amp; Portais do Brasil)</h2>
+              <p class="muted">Busque notícias quentes em tempo real e clique em <strong>⚡ Usar esta Pauta</strong> para gerar o roteiro viral completo (<= 58s).</p>
+            </div>
+            <div class="inline-pair">
+              <input type="text" id="radarQueryInput" value="GTA 6" style="width:160px;" placeholder="Pauta / Termo" />
+              <select id="radarGeoSelect" style="width:90px;">
+                <option value="BR" selected>Brasil</option>
+                <option value="US">EUA</option>
+              </select>
+              <button type="button" id="fetchRadarBtn" class="btn btn-primary btn-sm">🔍 Buscar Notícias de Hoje</button>
+            </div>
+          </div>
+          <div id="radarTopicsList" class="radar-grid">
+            <p class="muted" style="grid-column:1/-1; margin:8px 0;">Clique em <strong>Buscar Notícias de Hoje</strong> para carregar manchetes e matérias verificadas da Rockstar Games e portais brasileiros.</p>
+          </div>
+        </div>
+
+        <!-- FORMULÁRIO DE PAUTA DIRETA OU PERSONALIZADA -->
+        <form id="createProjectForm">
+          <div class="two-col">
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>📝 Informações da Notícia</h2>
+                  <p class="muted">Defina a manchete ou cole a notícia que vai virar o YouTube Shorts.</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field full">
+                  <label>Manchete / Título da Notícia *</label>
+                  <input type="text" id="songTitleInput" required placeholder="Ex: GTA 6 tem data, preço no Pix e versão em caixa confirmados" />
+                </div>
+                <div class="field">
+                  <label>Jogo / Tema</label>
+                  <input type="text" id="artistInput" required value="GTA 6" />
+                </div>
+                <div class="field">
+                  <label>Estilo Viral do Roteiro</label>
+                  <select id="gamingViralArchetypeSelect">
+                    <option value="auto" selected>Automático (Melhor para a Notícia)</option>
+                    <option value="contraste_detalhe">Contraste / Pegadinha ("Mas tem um detalhe...")</option>
+                    <option value="lista_open_loop">Lista com Gancho Final ("N fatos — e o último...")</option>
+                    <option value="raio_x_numeros">Raio-X &amp; Números ("R$ 400 / 212 GB / 60 FPS")</option>
+                    <option value="gameplay_imersao">Gameplay &amp; Reação ("Funciona assim...")</option>
+                  </select>
+                </div>
+                <div class="field full">
+                  <label>Link da Fonte / Matéria (opcional — para extrair dados)</label>
+                  <input type="text" id="gamingSourceUrlInput" placeholder="https://olhardigital.com.br/... ou https://voxel.com.br/..." />
+                </div>
+                <div class="field full">
+                  <label>Observação ou Ângulo Extra (opcional)</label>
+                  <input type="text" id="topicAngleInput" placeholder="Ex: Focar na polêmica da mídia física vir apenas com código sem disco" />
+                </div>
+              </div>
+            </div>
+
+            <!-- ACERVO DE TRAILERS GTA 6 -->
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>🎬 Acervo de Trailers em <code>inputs/gta6/</code></h2>
+                  <p class="muted">Trailers oficiais e gameplays MP4 usados automaticamente como fundo em movimento para todas as cenas.</p>
+                </div>
+                <label class="btn btn-secondary btn-sm file-btn">
+                  + Enviar Trailer MP4
+                  <input type="file" id="uploadGta6ClipInput" accept=".mp4,.mov,.webm,.mkv" hidden />
+                </label>
+              </div>
+              <div id="gta6LibrarySummary" class="clips-strip"></div>
+              <p class="muted" style="font-size:12px; margin-top:8px;">
+                ⚡ O sistema analisa os cortes dos trailers automaticamente e descarta telas pretas, priorizando momentos de ação urbana e perseguição.
+              </p>
+            </div>
+          </div>
+
+          <div class="step-footer">
+            <span class="muted">Roteiro cronometrado (&lt;= 58 segundos) • Locução neural automática • Zero-API</span>
+            <button type="submit" class="btn btn-primary btn-lg" id="createProjectBtn">
+              🚀 Criar Roteiro do Short (<= 58s) →
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- =========================================================
+           ETAPA 2: ROTEIRO & LOCUÇÃO NEURAL (58s CRAVADOS)
+           ========================================================= -->
+      <section id="step-2" class="step-panel">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>2. Roteiro Viral &amp; Locução PT-BR</h2>
+              <p class="muted">Roteiro dividido em cenas dinâmicas. As imagens e cortes de trailer são sincronizados exatamente com o que é falado aqui.</p>
+            </div>
+            <div class="inline-pair">
+              <span id="gamingDurationMeter" class="mini-pill ok">~0.0s / Máx 58s</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="step2SaveBtn">💾 Salvar Roteiro</button>
+            </div>
+          </div>
+
+          <div class="form-grid compact" style="margin-bottom: 14px;">
+            <div class="field full">
+              <label>Título do Gancho (Exibido no Topo do Shorts)</label>
+              <input type="text" id="editHookTitle" />
+            </div>
+            <div class="field">
+              <label>Voz do Narrador (Padrão Oficial GTA)</label>
+              <select id="editVoiceName">
+                <option value="pt-BR-AntonioNeural" selected>🎙️ Antônio (Oficial • Grave/Notícia)</option>
+                <option value="pt-BR-FranciscaNeural">🎙️ Francisca (Feminina • Natural)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Velocidade &amp; Teto YouTube Shorts</label>
+              <div class="inline-pair">
+                <select id="editSpeechRate">
+                  <option value="+12%">Ágil (+12%)</option>
+                  <option value="+14%" selected>Ritmo Viral (+14%)</option>
+                  <option value="+16%">Rápida (+16%)</option>
+                </select>
+                <input type="number" id="editMaxDurationSec" min="20" max="58" step="1" value="58" style="width:90px;" />
+              </div>
+            </div>
+            <div class="field full">
+              <label>Arquétipo Viral do Roteiro</label>
+              <div class="inline-pair">
+                <select id="editViralArchetype">
+                  <option value="auto">Automático (Otimizado p/ Notícia)</option>
+                  <option value="contraste_detalhe">Contraste ("Mas tem um detalhe que ninguém viu...")</option>
+                  <option value="lista_open_loop">Lista ("3 motivos — e o último vai te chocar...")</option>
+                  <option value="raio_x_numeros">Raio-X de Dados ("R$ 400 / 212 GB / 60 FPS")</option>
+                  <option value="gameplay_imersao">Gameplay &amp; Reação ("Funciona assim na prática...")</option>
+                </select>
+                <button type="button" class="btn btn-secondary btn-sm" id="regenerateGamingScriptBtn">🔄 Reescrever Roteiro</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="step2ScenesList" class="scenes-script-list"></div>
+        </div>
+
+        <div class="step-footer">
+          <button type="button" class="btn btn-secondary" data-goto-step="1">← Voltar: Pauta</button>
+          <button type="button" class="btn btn-primary btn-lg" id="step2NextBtn">Salvar &amp; Ir para Estúdio Visual 9:16 →</button>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           ETAPA 3: ESTÚDIO VISUAL 9:16 & MONTAGEM EM TEMPO REAL
+           ========================================================= -->
+      <section id="step-3" class="step-panel">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>3. Estúdio Visual 9:16 &amp; Montagem do Shorts</h2>
+              <p class="muted">Fundo em vídeo dos trailers de GTA 6 em movimento contínuo. Fotos reais ou ilustrações IA entram apenas quando forem 100% coerentes com o roteiro.</p>
+            </div>
+            <div class="inline-pair">
+              <button type="button" id="autoBlendMediaBtn" class="btn btn-primary">🎬 Re-montar Vídeo com IA</button>
+            </div>
+          </div>
+
+          <!-- ESTÚDIO AO VIVO (CELULAR 9:16 + CONTROLES) -->
+          <div id="liveStep4Studio" class="live-studio-shell">
+            <div class="live-phone-col">
+              <div class="live-mode-tabs">
+                <button type="button" id="liveModeInstantBtn" class="live-mode-btn active">⚡ Prévia Instantânea</button>
+                <button type="button" id="liveModeRealBtn" class="live-mode-btn" title="Exibe o MP4 FFmpeg renderizado desta cena">🎞️ MP4 Real da Cena</button>
+              </div>
+              <div id="livePhoneFrame" class="live-phone-frame">
+                <video id="liveBgBlurVideo" class="live-bg-blur hidden" muted playsinline loop preload="metadata"></video>
+                <img id="liveBgBlurImg" class="live-bg-blur hidden" alt="" />
+                <video id="liveBgVideo" class="live-bg-video hidden" muted playsinline preload="metadata"></video>
+                <img id="liveBgImg" class="live-bg-img hidden" alt="" />
+                <div class="live-scrim-top"></div>
+                <div class="live-scrim-bot"></div>
+                <div id="liveTopPill" class="live-top-pill hidden"></div>
+                <div id="liveOverlayLayer" class="live-overlay-layer hidden"></div>
+                <div id="liveSubtitleBox" class="live-subtitle-box"></div>
+                <video id="liveRealSceneVideo" class="live-real-video hidden" controls playsinline></video>
+              </div>
+            </div>
+
+            <div class="live-controls-col">
+              <div class="live-transport-bar">
+                <div class="inline-pair">
+                  <button type="button" id="livePlayAllBtn" class="btn btn-primary btn-sm">▶ Reproduzir Tudo</button>
+                  <button type="button" id="livePlaySceneBtn" class="btn btn-secondary btn-sm">▶ Só Cena</button>
+                  <button type="button" id="livePauseBtn" class="btn btn-secondary btn-sm hidden">⏸ Pausar</button>
+                  <button type="button" id="liveAudioToggleBtn" class="btn btn-secondary btn-sm">🔇 Trilha Off</button>
+                </div>
+                <span id="liveTimeReadout" class="live-time-readout">Cena 1/1 • 0.0s / 0.0s</span>
+              </div>
+
+              <div class="live-scrubber-wrap">
+                <input type="range" id="liveScrubber" min="0" max="1000" value="0" />
+              </div>
+
+              <div class="live-timeline-header">
+                <span>Linha do Tempo das Cenas (clique para inspecionar)</span>
+                <small class="muted">Fundo 100% vídeo de trailer em movimento</small>
+              </div>
+              <div id="liveTimelineTrack" class="live-timeline-track"></div>
+
+              <div id="liveActiveSceneBox" class="live-active-scene-box">
+                <div class="live-active-head">
+                  <div class="inline-pair">
+                    <strong id="liveActiveTitle">Cena 1</strong>
+                    <span id="liveActiveModeBadge" class="mini-pill">none_motion_only</span>
+                    <span id="liveActiveDurationBadge" class="mini-pill ok">~8.5s</span>
+                  </div>
+                  <div class="inline-pair">
+                    <button type="button" id="livePrevSceneBtn" class="btn btn-secondary btn-sm" title="Cena Anterior">◀ Anterior</button>
+                    <button type="button" id="liveNextSceneBtn" class="btn btn-secondary btn-sm" title="Próxima Cena">Próxima ▶</button>
+                    <button type="button" id="liveSaveSceneBtn" class="btn btn-primary btn-sm">💾 Salvar Cena</button>
+                  </div>
+                </div>
+
+                <div id="liveActiveReason" class="live-active-reason"></div>
+
+                <!-- 1. LOCUÇÃO DA CENA -->
+                <div class="editor-section">
+                  <label class="editor-label">🎙️ Narração Desta Cena (Legendas e Locução Neural)</label>
+                  <textarea id="liveActiveNarrationInput" rows="2" class="sc-narr" placeholder="Texto falado pelo narrador nesta cena..."></textarea>
+                </div>
+
+                <!-- 2. VÍDEO DE FUNDO EM MOVIMENTO (TRAILER LOCAL) -->
+                <div class="editor-section">
+                  <div class="editor-section-head">
+                    <label class="editor-label">🎬 Vídeo de Fundo da Cena (Trailers Locais em inputs/gta6/)</label>
+                    <label class="btn btn-secondary btn-xs file-btn">
+                      + Subir Outro Vídeo
+                      <input type="file" id="liveActiveVideoUploadInput" accept=".mp4,.mov,.webm,.mkv" hidden />
+                    </label>
+                  </div>
+                  <div class="two-col-editor">
+                    <div class="field">
+                      <small class="muted">Trailer / Gameplay de Fundo</small>
+                      <select id="liveActiveTrailerSelect" class="editor-select"></select>
+                    </div>
+                    <div class="field">
+                      <small class="muted">Segundo Inicial do Corte</small>
+                      <div class="inline-pair">
+                        <input type="number" id="liveActiveVideoStartInput" min="0" max="600" step="0.5" value="0" class="editor-number" />
+                        <span class="mini-pill">segundos</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 3. OVERLAY / IMAGEM DA CENA -->
+                <div class="editor-section">
+                  <label class="editor-label">🖼️ Camada de Destaque / Imagem Sobreposta</label>
+                  <div class="overlay-mode-toggles">
+                    <button type="button" id="ovModeNoneBtn" class="mode-toggle-btn active" data-mode="none_motion_only">🚫 Vídeo Limpo (Sem Imagem)</button>
+                    <button type="button" id="ovModePhotoBtn" class="mode-toggle-btn" data-mode="matched_photo">📰 Imagem / Foto da Notícia</button>
+                    <button type="button" id="ovModeAiBtn" class="mode-toggle-btn" data-mode="ai_generated">🎨 Ilustração IA (Flux)</button>
+                  </div>
+
+                  <!-- Detalhes do Overlay quando ativo -->
+                  <div id="liveActiveOverlayDetails" class="overlay-details-panel hidden">
+                    <div class="two-col-editor" style="margin-top:10px;">
+                      <div class="field">
+                        <small class="muted">Texto da Tarja / Selo Superior</small>
+                        <input type="text" id="liveActiveOverlayLabelInput" placeholder="Ex: 🔥 OFICIAL • R$ 449" class="editor-input" />
+                      </div>
+                      <div class="field">
+                        <small class="muted">Posição na Tela (9:16)</small>
+                        <select id="liveActiveOverlayPosSelect" class="editor-select">
+                          <option value="top_center" selected>Superior Central (Recomendado)</option>
+                          <option value="center">Centro da Tela</option>
+                          <option value="top_left">Superior Esquerdo</option>
+                          <option value="top_right">Superior Direito</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Bloco de Imagem da Notícia ou Upload -->
+                    <div id="overlayPhotoControls" class="overlay-sub-controls hidden">
+                      <div class="inline-pair" style="margin-top:8px;">
+                        <label class="btn btn-secondary btn-sm file-btn">
+                          📁 Enviar Foto Personalizada (PNG/JPG)
+                          <input type="file" id="liveActiveOverlayUploadInput" accept="image/*" hidden />
+                        </label>
+                        <span id="liveActiveOverlayFilename" class="muted" style="font-size:12px;"></span>
+                      </div>
+                    </div>
+
+                    <!-- Bloco de IA com Prompt editável -->
+                    <div id="overlayAiControls" class="overlay-sub-controls hidden">
+                      <div style="margin-top:8px;">
+                        <small class="muted">Prompt da Ilustração IA (Flux - Sem API):</small>
+                        <div class="inline-pair" style="margin-top:4px;">
+                          <input type="text" id="liveActiveAiPromptInput" class="editor-input" placeholder="Prompt visual da cena..." />
+                          <button type="button" id="liveActiveGenerateAiBtn" class="btn btn-secondary btn-sm">🎨 Gerar com IA</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 4. BOTÃO DE PRÉVIA RENDERIZADA -->
+                <div class="live-active-actions" style="margin-top:14px;">
+                  <button type="button" id="liveQuickRenderSceneBtn" class="btn btn-primary" title="Renderiza só esta cena via FFmpeg">
+                    🎞️ Renderizar Prévia MP4 Desta Cena (~5s)
+                  </button>
+                </div>
+              </div>
+              <audio id="livePreviewAudio" class="hidden" preload="metadata"></audio>
+            </div>
+          </div>
+
+          <!-- GRADE COM TODAS AS CENAS DO SHORTS -->
+          <div class="card" style="margin-top: 18px;">
+            <div class="card-head">
+              <div>
+                <h3>📋 Todas as Cenas do Shorts (Clique para Selecionar e Editar)</h3>
+                <p class="muted">Alterne rapidamente entre os cortes de trailer e mídias de cada parte do roteiro.</p>
+              </div>
+            </div>
+            <div id="scenesContainer" class="scenes-grid"></div>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button type="button" class="btn btn-secondary" data-goto-step="2">← Voltar: Roteiro</button>
+          <button type="button" class="btn btn-primary btn-lg" id="step3NextBtn">Avançar para Gerar Shorts &amp; YouTube →</button>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           ETAPA 4: GERAR SHORTS & PACOTE YOUTUBE COMPLETO
+           ========================================================= -->
+      <section id="step-4" class="step-panel">
+        <div class="card vice-card">
+          <div class="card-head">
+            <div>
+              <h2>4. Renderizar Vídeo &amp; Pacote YouTube Shorts</h2>
+              <p class="muted">Gere o arquivo final MP4 vertical em 1080x1920 a 30fps com legendas Vice City, trilha de ação e título/tags otimizados.</p>
+            </div>
+            <button type="button" id="renderAllBtn" class="btn btn-primary btn-lg">🚀 Renderizar YouTube Short Completo</button>
+          </div>
+
+          <div id="renderJobBox" class="job-box hidden" style="margin-top: 14px; padding: 14px; border-radius: 12px; border: 1px solid var(--accent); background: var(--surface-2);">
+            <div class="job-top">
+              <strong id="jobMessage">Renderizando...</strong>
+              <span id="jobPercent">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="jobProgressBar" class="progress-fill"></div>
+            </div>
+            <p id="jobError" class="error-text hidden"></p>
+          </div>
+        </div>
+
+        <!-- STATUS DE PUBLICAÇÃO & CONTROLE DO CANAL -->
+        <div id="publishStatusCard" class="card vice-card">
+          <div class="card-head">
+            <div class="inline-pair" style="gap:12px; align-items:center;">
+              <span id="publishStatusPill" class="mini-pill pending">⏳ Pendente de Postagem</span>
+              <div>
+                <h3 style="margin:0;">Status no Canal / Redes</h3>
+                <p id="publishStatusSubtitle" class="muted" style="margin:2px 0 0 0;">Marque aqui quando o vídeo tiver sido postado no YouTube Shorts.</p>
+              </div>
+            </div>
+            <button type="button" id="togglePostedBtn" class="btn btn-primary">
+              <span id="togglePostedBtnIcon">✅</span> <span id="togglePostedBtnText">Marcar como Postado</span>
+            </button>
+          </div>
+
+          <div id="publishDetailsPanel" class="publish-details-panel hidden" style="margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);">
+            <div class="form-grid compact">
+              <div class="field">
+                <label>Plataforma Postada</label>
+                <select id="editPostedPlatform">
+                  <option value="youtube" selected>🔴 YouTube Shorts</option>
+                  <option value="tiktok">⬛ TikTok</option>
+                  <option value="instagram">🟣 Instagram Reels</option>
+                  <option value="multi">🌐 Multiplataforma (Todas)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Data &amp; Hora da Postagem</label>
+                <input type="text" id="displayPostedAt" readonly class="mono-box" style="background:var(--surface-2); cursor:default;" />
+              </div>
+              <div class="field full">
+                <label>Link do Vídeo Postado (Opcional)</label>
+                <div class="inline-pair">
+                  <input type="url" id="editPostedUrl" placeholder="https://youtube.com/shorts/SEU_VIDEO" />
+                  <button type="button" id="openPostedUrlBtn" class="btn btn-secondary btn-sm" title="Abrir vídeo em nova aba">🔗 Abrir</button>
+                  <button type="button" id="savePostedDetailsBtn" class="btn btn-secondary btn-sm">💾 Salvar Detalhes</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PACOTE YOUTUBE SHORTS & TIKTOK -->
+        <div id="gamingSocialPackCard" class="card vice-card">
+          <div class="card-head">
+            <div>
+              <h3>📺 Pacote de Publicação YouTube Shorts</h3>
+              <p class="muted">Título com gancho viral (&lt;= 95 caracteres), descrição citando a fonte e tags prontas para colar.</p>
+            </div>
+            <div class="inline-pair">
+              <button type="button" id="copyYoutubePackBtn" class="btn btn-primary btn-sm">📋 Copiar Tudo p/ YouTube</button>
+              <button type="button" id="copyTiktokCaptionBtn" class="btn btn-secondary btn-sm">📋 Copiar p/ TikTok</button>
+            </div>
+          </div>
+          <div class="form-grid compact" style="margin-top:0;">
+            <div class="field full">
+              <label>Título YouTube Shorts <span id="ytTitleCharCount" class="mini-pill" style="margin-left:6px;">0/95</span></label>
+              <input type="text" id="editYoutubeTitle" maxlength="100" />
+            </div>
+            <div class="field full">
+              <label>Descrição com Fonte da Notícia</label>
+              <textarea id="editYoutubeDescription" rows="3"></textarea>
+            </div>
+            <div class="field">
+              <label>Tags YouTube (separadas por vírgula)</label>
+              <input type="text" id="editYoutubeTags" />
+            </div>
+            <div class="field">
+              <label>Legenda TikTok (com hashtags)</label>
+              <textarea id="editTiktokCaption" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- ESTÚDIO DE THUMBNAIL / CAPA 9:16 -->
+        <div id="thumbnailStudioCard" class="card">
+          <div class="card-head">
+            <div>
+              <h3>🎨 Estúdio de Thumbnail / Capa (1080×1920)</h3>
+              <p class="muted">Gere capas de alto impacto com manchete neon e corte nítido dos trailers.</p>
+            </div>
+            <button type="button" id="regenThumbBtn" class="btn btn-secondary">🎨 Gerar Capa de Destaque</button>
+          </div>
+          <div class="thumb-studio-grid">
+            <div class="thumb-studio-fields">
+              <div class="field">
+                <label>Estilo Visual da Capa</label>
+                <select id="editThumbStyle">
+                  <option value="vice_city_magazine" selected>Vice City Neon (Oficial GTA 6)</option>
+                  <option value="breaking_alert">Plantão Urgente (Vermelho &amp; Amarelo)</option>
+                  <option value="split_versus">Split 2 Cenas (Comparação)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Foto Base da Capa</label>
+                <select id="editThumbSceneIdx">
+                  <option value="">Automático (Melhor frame nítido)</option>
+                </select>
+              </div>
+              <div class="field full">
+                <label>Manchete de Impacto na Capa</label>
+                <input type="text" id="editThumbHeadline" maxlength="85" placeholder="Ex: GTA 6: DATA E PREÇO OFICIAIS!" />
+              </div>
+              <div class="field full">
+                <label>Selo Superior</label>
+                <input type="text" id="editThumbBadge" maxlength="42" placeholder="Ex: 🔥 OFICIAL • ROCKSTAR GAMES" />
+              </div>
+            </div>
+            <div class="thumb-studio-preview-col">
+              <div id="thumbPreviewEmpty" class="thumb-preview-empty">Clique em "Gerar Capa de Destaque" para visualizar</div>
+              <img id="thumbStudioPreview" class="thumb-studio-img hidden" alt="Prévia da Capa / Thumbnail" />
+            </div>
+          </div>
+        </div>
+
+        <!-- AUDITORIA DE PROCEDÊNCIA & LICENÇAS DE MÍDIA (Tarefa 1.1) -->
+        <div id="mediaLicensesCard" class="card vice-card">
+          <div class="card-head">
+            <div class="inline-pair" style="gap:10px; align-items:center;">
+              <span id="mediaLicenseBadge" class="mini-pill">🛡️ Procedência &amp; Licenças</span>
+              <div>
+                <h3 style="margin:0;">Mídias Usadas no Vídeo</h3>
+                <p class="muted" style="margin:2px 0 0 0;">Origem, detentor dos direitos autorais e conformidade de cada mídia desta montagem.</p>
+              </div>
+            </div>
+          </div>
+          <div id="mediaLicensesList" class="media-licenses-list" style="margin-top:14px;"></div>
+        </div>
+
+        <!-- VÍDEOS GERADOS & QA -->
+        <div id="outputsSection" class="card hidden">
+          <h3>Vídeos Gerados &amp; Download</h3>
+          <div id="outputsGrid" class="outputs-grid"></div>
+        </div>
+
+        <div class="step-footer">
+          <button type="button" class="btn btn-secondary" data-goto-step="3">← Voltar: Estúdio Visual 9:16</button>
+          <span></span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- IMPORT ROTEIRO JSON MODAL -->
+  <div id="importJsonModal" class="modal hidden">
+    <div class="modal-card modal-wide">
+      <h3>Importar Roteiro JSON (Zero API)</h3>
+      <p class="muted">Cole abaixo o JSON do roteiro com as cenas para abrir direto no estúdio.</p>
+      <textarea id="agentJsonTextarea" rows="12" placeholder='{"song_title": "GTA 6 Preço Oficial", "artist": "GTA 6", "scenes": [...]}'></textarea>
+      <div class="modal-actions">
+        <button type="button" id="closeImportJsonBtn" class="btn btn-secondary">Cancelar</button>
+        <button type="button" id="confirmImportJsonBtn" class="btn btn-primary">Importar para o Estúdio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GEMINI API KEY MODAL -->
+  <div id="keyModal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Configurar Chave Gemini API (Opcional)</h3>
+      <p class="muted">O estúdio funciona 100% de forma gratuita sem precisar de chave de API. Se quiser usar modelos do Google Gemini, cole sua chave abaixo:</p>
+      <input type="password" id="geminiKeyInput" placeholder="Cole sua GEMINI_API_KEY (AIza...)" />
+      <div class="modal-actions">
+        <button type="button" id="closeKeyModalBtn" class="btn btn-secondary">Cancelar</button>
+        <button type="button" id="saveKeyBtn" class="btn btn-primary">Salvar Chave</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PACKED TIMELINE & JSON MODAL -->
+  <div id="packedModal" class="modal hidden">
+    <div class="modal-card modal-wide">
+      <div class="card-head">
+        <h3>JSON do Projeto</h3>
+        <button type="button" id="copyProjectJsonBtn" class="btn btn-secondary btn-sm">Copiar JSON</button>
+      </div>
+      <textarea id="packedTextarea" rows="14" readonly class="mono-box"></textarea>
+      <div class="modal-actions">
+        <button type="button" id="closePackedModalBtn" class="btn btn-primary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=2"></script>
+</body>
+</html>
