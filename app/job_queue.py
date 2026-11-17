@@ -11,9 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from app.config import INPUTS_DIR
+
 logger = logging.getLogger(__name__)
 
-JOBS_DIR = Path("inputs") / "jobs"
+JOBS_DIR = INPUTS_DIR / "jobs"
 STAGE_NAMES = ["pesquisa", "roteiro", "tts", "render", "qa"]
 
 

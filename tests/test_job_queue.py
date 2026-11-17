@@ -192,3 +192,14 @@ def test_enqueue_is_deduplicated(tmp_path: Path):
     job = m.create_job("dup")
     assert m._enqueue(job.id) is False
 
+
+def test_jobs_dir_is_absolute_and_independent_of_cwd(tmp_path: Path, monkeypatch):
+    """T2: JOBS_DIR deve ser absoluto e não depender do diretório atual (cwd)."""
+    from app.job_queue import JOBS_DIR
+
+    assert JOBS_DIR.is_absolute()
+    resolved_before = JOBS_DIR.resolve()
+    monkeypatch.chdir(tmp_path)
+    assert JOBS_DIR.resolve() == resolved_before
+
+
