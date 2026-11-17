@@ -127,3 +127,33 @@ def test_qa_blocks_unknown_media_in_non_commercial_intent(tmp_path: Path):
     assert rep["qa_passed"] is False
     assert rep["media_audit"]["status"] == "blocked"
     assert len(rep["media_audit"]["blocking_reasons"]) >= 1
+
+
+def test_catalog_has_no_unproven_official_permission_and_trailers_are_fair_use_claimed():
+    """T6: Nenhum item do catálogo pode ter official_permission sem proof_url; trailers devem ser fair_use_claimed."""
+    from app.gaming_media import load_media_catalog
+
+    catalog = load_media_catalog()
+    items = catalog.get("items", [])
+    assert len(items) >= 8
+
+    trailer_ids = {"gta_trailer_1", "gta_trailer_2", "gta_trailer_lancamento", "gta_revelacao_capa"}
+    seen_trailers = set()
+    for item in items:
+        auth = item.get("authorization_status")
+        if auth == "official_permission":
+            assert bool((item.get("proof_url") or "").strip()), (
+                f"Item '{item.get('media_id')}' usa official_permission sem proof_url real."
+            )
+        if item.get("media_id") in trailer_ids:
+            seen_trailers.add(item["media_id"])
+            assert auth == "fair_use_claimed"
+            assert item.get("commercial_use_allowed") is False
+            assert item.get("proof_url") is None
+            assert item.get("verified_at") is None
+            # Nunca liberado para commercial, aceito apenas para editorial/non_commercial
+            assert media_allowed(item, "commercial")[0] is False
+            assert media_allowed(item, "editorial")[0] is True
+            assert media_allowed(item, "non_commercial")[0] is True
+    assert seen_trailers == trailer_ids
+

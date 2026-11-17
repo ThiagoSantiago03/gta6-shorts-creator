@@ -1821,7 +1821,7 @@ def record_project_used_media(project: MusicStoryProject) -> list[dict[str, Any]
             is_trailer = any(k in t_name.lower() for k in ("trailer", "gta", "rockstar"))
             default_owner = "Rockstar Games / Take-Two Interactive" if is_trailer else "Desconhecido"
             default_license = "promotional_fair_use" if is_trailer else "desconhecido"
-            default_auth = "official_permission" if is_trailer else "unknown"
+            default_auth = "unknown"  # Sem registro no catálogo, nunca presumir permissão oficial
             default_risk = "medio" if is_trailer else "alto"
             used.append({
                 "media_id": mid,

@@ -145,7 +145,7 @@ def test_media_rights_gate_editorial_mode_allows_promotional_fair_use(tmp_path):
                 "source_url": "https://www.youtube.com/watch?v=QdBZY2fkU-0",
                 "copyright_owner": "Rockstar Games / Take-Two Interactive",
                 "license_type": "promotional_fair_use",
-                "authorization_status": "official_permission",
+                "authorization_status": "fair_use_claimed",
                 "commercial_use_allowed": False,
                 "attribution_required": True,
                 "risk_level": "medio",
