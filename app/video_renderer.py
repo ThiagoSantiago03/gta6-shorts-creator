@@ -2230,33 +2230,15 @@ def render_single_all_in_one_reel(
     return project
 
 
-def render_gaming_youtube_short(
+def _synthesize_gaming_short_narration(
     project: MusicStoryProject,
     work_dir: Path,
-    out_dir: Path,
+    max_cap: float,
+    intro_sec: float,
+    finale_tail_sec: float,
     api_key_override: str | None = None,
-) -> MusicStoryProject:
-    """
-    Dedicated fast-paced YouTube Shorts pipeline (`niche == "gaming_news"`):
-    - Prepares 9:16 news/real-world images & local GTA 6 trailer/gameplay video cuts
-    - Synthesizes energetic PT-BR Edge-TTS (`speech_rate`, default `+6%`)
-    - Auto-fits narration speed (`+12%`, `+16%`, `+20%`) & word budget so total runtime is STRICTLY <= `project.max_duration_sec` (`58.0s`)
-    - Mixes user music OR generated offline Vice-City synthwave bed cleanly at `-20 dB` underneath voice
-    - Renders Scene 1 Vice-City Neon HTML Opener + moving scene clips + YouTube/TikTok safe-zone subtitles
-    - Outputs `short_youtube_gta6.mp4` (`outputs["youtube_short"]`), `capa_destaque.png`, and `youtube_tiktok_pacote.txt`
-    """
-    ffmpeg = get_ffmpeg_exe()
-    work_dir.mkdir(parents=True, exist_ok=True)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    render_dir = work_dir / "render_allinone"
-    render_dir.mkdir(parents=True, exist_ok=True)
-    api_key = get_gemini_api_key(api_key_override)
-
-    prepare_gaming_project_visuals(project, work_dir)
-
-    max_cap = min(58.0, float(getattr(project, "max_duration_sec", 58.0) or 58.0))
-    intro_sec = 0.0
-    finale_tail_sec = 0.25
+) -> tuple[list[dict[str, object]], str, str]:
+    """Etapa 1 do Short GTA 6: sintetiza narração TTS e ajusta taxa/palavras para caber no teto <= 58s."""
     pause_overhead = 0.16 * max(0, len(project.scenes) - 1)
     voice_budget = max(18.0, max_cap - intro_sec - finale_tail_sec - pause_overhead - 0.35)
 
@@ -2271,7 +2253,6 @@ def render_gaming_youtube_short(
     )
     voice_sum = sum(float(s["duration_sec"]) for s in segments)
 
-    # Auto-accelerate TTS cleanly if voice exceeds Shorts 58s duration budget
     for fallback_rate in ("+16%", "+20%", "+24%"):
         if voice_sum <= voice_budget:
             break
@@ -2286,10 +2267,15 @@ def render_gaming_youtube_short(
         )
         voice_sum = sum(float(s["duration_sec"]) for s in segments)
 
-    # Last safety net: trim middle sentences proportionally if script itself was manually edited way too long
     if voice_sum > voice_budget:
         sc_dicts = [s.model_dump() for s in project.scenes]
-        max_w = max(75, int(sum(len(s.narration_text.split()) for s in project.scenes) * (voice_budget / max(1.0, voice_sum))))
+        max_w = max(
+            75,
+            int(
+                sum(len(s.narration_text.split()) for s in project.scenes)
+                * (voice_budget / max(1.0, voice_sum))
+            ),
+        )
         trimmed = enforce_script_duration_budget(sc_dicts, max_words=max_w)
         for orig, td in zip(project.scenes, trimmed):
             orig.narration_text = str(td.get("narration_text", orig.narration_text))
@@ -2303,11 +2289,22 @@ def render_gaming_youtube_short(
             rate=cur_rate,
         )
 
-    # Disable long music breaks in Shorts mode so timing stays tight and under 58s
     for sc in project.scenes:
         sc.music_break_after_sec = 0.0
 
-    # Audio bed: explicit track -> auto-selected Suno/local track -> generated offline synthwave bed
+    return segments, actual_tts, cur_rate
+
+
+def _build_gaming_short_audio_plan(
+    project: MusicStoryProject,
+    segments: list[dict[str, object]],
+    work_dir: Path,
+    render_dir: Path,
+    max_cap: float,
+    intro_sec: float,
+    finale_tail_sec: float,
+) -> tuple[dict[str, object], float]:
+    """Etapa 2 do Short GTA 6: seleciona/gera trilha sonora e monta o master de áudio intercalado com ducking."""
     music_source: Path | None = (
         Path(project.audio_file)
         if project.audio_file and Path(project.audio_file).exists()
@@ -2330,7 +2327,8 @@ def render_gaming_youtube_short(
             project.audio_clip_start = round(
                 find_best_highlight_start(music_source, clip_duration=min(54.0, max_cap)), 1
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Falha ao localizar highlight inicial da trilha (%s): %s", music_source, exc)
             project.audio_clip_start = 0.0
 
     audio_plan = assemble_interleaved_audio(
@@ -2345,58 +2343,33 @@ def render_gaming_youtube_short(
         allow_short_finale=True,
     )
     visual_segments: list[dict[str, object]] = audio_plan["visual_segments"]
-    scene_spans: list[tuple[int, float, float]] = audio_plan["scene_spans"]
-    word_timings: list[WordTiming] = audio_plan["word_timings"]
     total_dur = min(max_cap, float(audio_plan["total_dur"]))
 
-    # Merge quick 0.85s finale tail smoothly onto last narration scene so there's zero abrupt cut at the end
+    # Mescla a cauda curta do finale na última cena narrada para evitar corte seco
     if len(visual_segments) >= 2 and visual_segments[-1].get("kind") == "music_finale":
         fin_seg = visual_segments.pop()
         prev_seg = visual_segments[-1]
         prev_seg["end"] = min(max_cap, float(fin_seg["end"]))
         prev_seg["duration_sec"] = round(float(prev_seg["end"]) - float(prev_seg["start"]), 3)
 
-    bpm = 118.0
-    n_total_frames = max(30, int(math.ceil(total_dur * FPS)) + 15)
-    t_arr = np.linspace(0, total_dur, n_total_frames, dtype=np.float32)[:, None]
-    b_idx = np.linspace(0, 1, 36, dtype=np.float32)[None, :]
-    beat = 0.5 + 0.5 * np.sin(2 * math.pi * (bpm / 60.0) * t_arr)
-    spectrum_full = np.clip(0.32 + 0.34 * np.sin(t_arr * 3.1 + b_idx * 8.0) + 0.24 * beat * np.exp(-3.0 * b_idx), 0.08, 0.95).astype(np.float32)
-    beat_flash_full = (np.maximum(0.0, np.sin(2 * math.pi * (bpm / 60.0) * t_arr[:, 0])) ** 6).astype(np.float32)
+    return audio_plan, total_dur
 
-    cover_path = out_dir / "capa_destaque.png"
-    generate_project_thumbnail(
-        project=project,
-        work_dir=work_dir,
-        out_cover_path=cover_path,
-    )
 
-    overlay_png = _build_reel1_overlay(project, render_dir / "overlay.png")
-    generate_ass_subtitles(
-        word_timings=word_timings,
-        scenes=project.scenes,
-        scene_spans=scene_spans,
-        out_ass_path=render_dir / "subtitles.ass",
-        subtitle_style=project.subtitle_style or "vice_city",
-        accent_color=project.accent_color,
-        safe_zone="youtube_shorts",
-    )
-
-    has_browser = find_headless_browser() is not None
+def _render_gaming_short_scenes(
+    project: MusicStoryProject,
+    visual_segments: list[dict[str, object]],
+    clip_durs: list[float],
+    work_dir: Path,
+    render_dir: Path,
+    spectrum_full: np.ndarray,
+    beat_flash_full: np.ndarray,
+    bpm: float,
+    has_browser: bool,
+) -> list[Path]:
+    """Etapa 3 do Short GTA 6: renderiza cada cena (HTML, vídeo+overlay, vídeo ou imagem+Ken Burns + quote)."""
     scene_map = {s.index: s for s in project.scenes}
-    fade_dur = 0.20
-    n_segs = len(visual_segments)
-    clip_durs: list[float] = []
-    for k, vseg in enumerate(visual_segments):
-        base_d = float(vseg["duration_sec"])  # type: ignore[arg-type]
-        if n_segs == 1:
-            clip_durs.append(base_d)
-        elif k == 0 or k == n_segs - 1:
-            clip_durs.append(round(base_d + fade_dur / 2.0, 3))
-        else:
-            clip_durs.append(round(base_d + fade_dur, 3))
-
     rendered_clips: list[Path] = []
+
     for k, vseg in enumerate(visual_segments):
         kind = str(vseg["kind"])
         clip_dur = clip_durs[k]
@@ -2410,10 +2383,19 @@ def render_gaming_youtube_short(
                 sc.asset_type = "html"
                 vseg["media_source"] = f"html:{Path(sc.html_path).name}"
                 done = True
-            except Exception:
+            except Exception as exc:
+                logger.warning("Fallback de render HTML na cena %s: %s", sc.index, exc)
                 done = False
 
-        if not done and kind == "hook_scene" and project.html_hook_card and sc.asset_type != "video" and has_browser and sc.image_path and Path(sc.image_path).exists():
+        if (
+            not done
+            and kind == "hook_scene"
+            and project.html_hook_card
+            and sc.asset_type != "video"
+            and has_browser
+            and sc.image_path
+            and Path(sc.image_path).exists()
+        ):
             try:
                 hook_html = work_dir / "hook_scene.html"
                 rel_img = Path(sc.image_path).resolve().relative_to(work_dir.resolve()).as_posix()
@@ -2436,7 +2418,8 @@ def render_gaming_youtube_short(
                 sc.asset_type = "html"
                 vseg["media_source"] = "html:hook_scene.html"
                 done = True
-            except Exception:
+            except Exception as exc:
+                logger.warning("Fallback de hook card HTML na cena %s: %s", sc.index, exc)
                 done = False
 
         if not done and sc.video_path and Path(sc.video_path).exists():
@@ -2469,7 +2452,8 @@ def render_gaming_youtube_short(
                     vseg["media_source"] = f"video:{Path(sc.video_path).name}"
                 sc.asset_type = "video"
                 done = True
-            except Exception:
+            except Exception as exc:
+                logger.warning("Fallback de cena vídeo+overlay na cena %s: %s", sc.index, exc)
                 try:
                     _render_scene_video_clip(
                         Path(sc.video_path),
@@ -2484,7 +2468,8 @@ def render_gaming_youtube_short(
                     sc.asset_type = "video"
                     vseg["media_source"] = f"video:{Path(sc.video_path).name}"
                     done = True
-                except Exception:
+                except Exception as exc2:
+                    logger.warning("Falha também no fallback de vídeo puro da cena %s: %s", sc.index, exc2)
                     done = False
 
         if not done and sc.image_path and Path(sc.image_path).exists():
@@ -2534,6 +2519,30 @@ def render_gaming_youtube_short(
 
         rendered_clips.append(seg_mp4)
 
+    return rendered_clips
+
+
+def _composite_mux_and_qa_gaming_short(
+    project: MusicStoryProject,
+    rendered_clips: list[Path],
+    clip_durs: list[float],
+    fade_dur: float,
+    overlay_png: Path,
+    audio_plan: dict[str, object],
+    total_dur: float,
+    bpm: float,
+    visual_segments: list[dict[str, object]],
+    scene_spans: list[tuple[int, float, float]],
+    word_timings: list[WordTiming],
+    cover_path: Path,
+    actual_tts: str,
+    cur_rate: str,
+    work_dir: Path,
+    render_dir: Path,
+    out_dir: Path,
+) -> MusicStoryProject:
+    """Etapa 4 do Short GTA 6: concatena com xfade, aplica overlay+legendas ASS, muxa áudio, gera pacote e roda QA."""
+    ffmpeg = get_ffmpeg_exe()
     concat_mp4 = render_dir / "visual_concat.mp4"
     _concat_with_xfade(rendered_clips, clip_durs, concat_mp4, fade_dur=fade_dur)
 
@@ -2569,7 +2578,11 @@ def render_gaming_youtube_short(
 
     audio_chosen: Path = (
         audio_plan["mixed_wav"]
-        if (project.audio_export_mode != "clean_for_instagram" and audio_plan.get("mixed_wav") and Path(audio_plan["mixed_wav"]).exists())
+        if (
+            project.audio_export_mode != "clean_for_instagram"
+            and audio_plan.get("mixed_wav")
+            and Path(audio_plan["mixed_wav"]).exists()
+        )
         else audio_plan["clean_wav"]
     )
     out_short = out_dir / "short_youtube_gta6.mp4"
@@ -2639,6 +2652,123 @@ def render_gaming_youtube_short(
     dur_measured = qa_report.get("probes", {}).get("youtube_short", {}).get("duration_sec", round(total_dur, 1))
     project.status = f"rendered ({actual_tts} @ {cur_rate} • Short {dur_measured}s • {qa_verdict})"
     return project
+
+
+def render_gaming_youtube_short(
+    project: MusicStoryProject,
+    work_dir: Path,
+    out_dir: Path,
+    api_key_override: str | None = None,
+) -> MusicStoryProject:
+    """
+    Pipeline principal de YouTube Shorts (`niche == "gaming_news"`), decomposto em 4 etapas nomeadas:
+    1. `_synthesize_gaming_short_narration` (TTS + controle real <= 58s)
+    2. `_build_gaming_short_audio_plan` (trilha/cama synthwave + ducking intercalado)
+    3. `_render_gaming_short_scenes` (cortes de trailer, overlays, Ken Burns e quotes)
+    4. `_composite_mux_and_qa_gaming_short` (xfade, legendas ASS, mux AAC, pacote e QA objetivo)
+    """
+    work_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    render_dir = work_dir / "render_allinone"
+    render_dir.mkdir(parents=True, exist_ok=True)
+
+    prepare_gaming_project_visuals(project, work_dir)
+
+    max_cap = min(58.0, float(getattr(project, "max_duration_sec", 58.0) or 58.0))
+    intro_sec = 0.0
+    finale_tail_sec = 0.25
+
+    segments, actual_tts, cur_rate = _synthesize_gaming_short_narration(
+        project=project,
+        work_dir=work_dir,
+        max_cap=max_cap,
+        intro_sec=intro_sec,
+        finale_tail_sec=finale_tail_sec,
+        api_key_override=api_key_override,
+    )
+    audio_plan, total_dur = _build_gaming_short_audio_plan(
+        project=project,
+        segments=segments,
+        work_dir=work_dir,
+        render_dir=render_dir,
+        max_cap=max_cap,
+        intro_sec=intro_sec,
+        finale_tail_sec=finale_tail_sec,
+    )
+
+    visual_segments: list[dict[str, object]] = audio_plan["visual_segments"]
+    scene_spans: list[tuple[int, float, float]] = audio_plan["scene_spans"]
+    word_timings: list[WordTiming] = audio_plan["word_timings"]
+
+    bpm = 118.0
+    n_total_frames = max(30, int(math.ceil(total_dur * FPS)) + 15)
+    t_arr = np.linspace(0, total_dur, n_total_frames, dtype=np.float32)[:, None]
+    b_idx = np.linspace(0, 1, 36, dtype=np.float32)[None, :]
+    beat = 0.5 + 0.5 * np.sin(2 * math.pi * (bpm / 60.0) * t_arr)
+    spectrum_full = np.clip(
+        0.32 + 0.34 * np.sin(t_arr * 3.1 + b_idx * 8.0) + 0.24 * beat * np.exp(-3.0 * b_idx),
+        0.08,
+        0.95,
+    ).astype(np.float32)
+    beat_flash_full = (np.maximum(0.0, np.sin(2 * math.pi * (bpm / 60.0) * t_arr[:, 0])) ** 6).astype(np.float32)
+
+    cover_path = out_dir / "capa_destaque.png"
+    generate_project_thumbnail(project=project, work_dir=work_dir, out_cover_path=cover_path)
+
+    overlay_png = _build_reel1_overlay(project, render_dir / "overlay.png")
+    generate_ass_subtitles(
+        word_timings=word_timings,
+        scenes=project.scenes,
+        scene_spans=scene_spans,
+        out_ass_path=render_dir / "subtitles.ass",
+        subtitle_style=project.subtitle_style or "vice_city",
+        accent_color=project.accent_color,
+        safe_zone="youtube_shorts",
+    )
+
+    has_browser = find_headless_browser() is not None
+    fade_dur = 0.20
+    n_segs = len(visual_segments)
+    clip_durs: list[float] = []
+    for k, vseg in enumerate(visual_segments):
+        base_d = float(vseg["duration_sec"])  # type: ignore[arg-type]
+        if n_segs == 1:
+            clip_durs.append(base_d)
+        elif k == 0 or k == n_segs - 1:
+            clip_durs.append(round(base_d + fade_dur / 2.0, 3))
+        else:
+            clip_durs.append(round(base_d + fade_dur, 3))
+
+    rendered_clips = _render_gaming_short_scenes(
+        project=project,
+        visual_segments=visual_segments,
+        clip_durs=clip_durs,
+        work_dir=work_dir,
+        render_dir=render_dir,
+        spectrum_full=spectrum_full,
+        beat_flash_full=beat_flash_full,
+        bpm=bpm,
+        has_browser=has_browser,
+    )
+    return _composite_mux_and_qa_gaming_short(
+        project=project,
+        rendered_clips=rendered_clips,
+        clip_durs=clip_durs,
+        fade_dur=fade_dur,
+        overlay_png=overlay_png,
+        audio_plan=audio_plan,
+        total_dur=total_dur,
+        bpm=bpm,
+        visual_segments=visual_segments,
+        scene_spans=scene_spans,
+        word_timings=word_timings,
+        cover_path=cover_path,
+        actual_tts=actual_tts,
+        cur_rate=cur_rate,
+        work_dir=work_dir,
+        render_dir=render_dir,
+        out_dir=out_dir,
+    )
 
 
 def render_full_project(
