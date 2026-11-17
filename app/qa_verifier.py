@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 import tempfile
@@ -14,6 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from app.config import get_ffmpeg_exe
 from app.models import MusicStoryProject, WordTiming
+
+logger = logging.getLogger("gta6_qa")
 
 
 def _load_mono_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -45,9 +48,9 @@ def _load_mono_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 def write_packed_timeline(
     project: MusicStoryProject,
-    scene_spans: list[tuple[int, float, float]],
-    word_timings: list[WordTiming],
-    out_path: Path,
+    scene_spans: list[tuple[int, float, float]] | None = None,
+    word_timings: list[WordTiming] | None = None,
+    out_path: Path | None = None,
     beat_bpm: float | None = None,
     visual_segments: list[dict[str, Any]] | None = None,
     audio_timeline: list[dict[str, Any]] | None = None,
@@ -56,7 +59,7 @@ def write_packed_timeline(
     Create compact `project_packed.md` (video-use pattern: 1/10th the tokens of raw JSON)
     listing exact [start-end] timestamps, asset sources, effects, and spoken phrases.
     """
-    span_map = {idx: (st, en) for idx, st, en in scene_spans}
+    span_map = {idx: (st, en) for idx, st, en in (scene_spans or [])}
     fin_src_tag = (
         f" | Finale@{project.finale_audio_start_sec:.1f}s"
         if getattr(project, "finale_audio_start_sec", None) is not None
@@ -424,8 +427,8 @@ def run_project_qa(
     project: MusicStoryProject,
     work_dir: Path,
     out_dir: Path,
-    scene_spans: list[tuple[int, float, float]],
-    word_timings: list[WordTiming],
+    scene_spans: list[tuple[int, float, float]] | None = None,
+    word_timings: list[WordTiming] | None = None,
     beat_bpm: float | None = None,
     visual_segments: list[dict[str, Any]] | None = None,
     audio_timeline: list[dict[str, Any]] | None = None,
@@ -542,42 +545,66 @@ def run_project_qa(
 
     all_passed = all(v.get("passed", False) for v in probes.values()) if probes else False
 
-    # Media Licensing & Provenance Check (Tarefa 1.1)
+    # Media Licensing & Provenance Check (Tarefa 1.1 / M-01 / C-07)
     media_list = getattr(project, "used_media", []) or []
     if not media_list:
         try:
             from app.gaming_media import record_project_used_media
             media_list = record_project_used_media(project)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Falha ao levantar mídias usadas no QA: %s", exc)
             media_list = []
 
+    publish_intent = getattr(project, "publish_intent", "commercial") or "commercial"
     media_warnings: list[str] = []
+    blocking_reasons: list[str] = []
     high_risk_media = 0
     unverified_media = 0
+
     for med in media_list:
         fn = med.get("filename", "")
         role = med.get("role", "")
         lic = med.get("license_type", "desconhecido")
         risk_lvl = med.get("risk_level", "alto")
+        auth_status = med.get("authorization_status", "unknown")
+        comm_allowed = med.get("commercial_use_allowed", False)
+
         if lic in ("desconhecido", "royalty_free_unverified"):
             unverified_media += 1
             media_warnings.append(
-                f"Mídia '{fn}' ({role}) sem licença verificada ({lic})."
+                f"Mídia '{fn}' ({role}) sem licença formal verificada ({lic})."
             )
         if risk_lvl == "alto":
             high_risk_media += 1
 
+        # M-01 Gate de Direitos
+        if publish_intent == "commercial":
+            if not comm_allowed or auth_status in ("unknown", "restricted", "review_required", "non_commercial_only"):
+                blocking_reasons.append(
+                    f"Mídia '{fn}' ({role}) bloqueada para uso comercial (status: {auth_status}, licença: {lic})."
+                )
+        elif publish_intent == "editorial":
+            if auth_status in ("unknown", "restricted"):
+                blocking_reasons.append(
+                    f"Mídia '{fn}' ({role}) desconhecida/restrita bloqueada para publicação."
+                )
+
+    is_blocked = len(blocking_reasons) > 0
+    media_status = "blocked" if is_blocked else ("warning" if media_warnings else "ok")
+
     media_audit = {
-        "status": "warning" if media_warnings else "ok",
+        "status": media_status,
+        "publish_intent": publish_intent,
         "total_media_used": len(media_list),
         "unverified_count": unverified_media,
         "high_risk_count": high_risk_media,
         "media_items": media_list,
         "warnings": media_warnings,
+        "blocking_reasons": blocking_reasons,
     }
 
     report = {
-        "qa_passed": all_passed and risk.get("verdict") != "fail",
+        "qa_passed": all_passed and risk.get("verdict") != "fail" and not is_blocked,
         "slideshow_risk": risk,
         "probes": probes,
         "media_audit": media_audit,

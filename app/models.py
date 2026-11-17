@@ -9,12 +9,16 @@ class TopicTrendItem(BaseModel):
     id: str
     title: str
     source: str = ""
+    fonte_primaria: str = ""
+    fontes_secundarias: list[str] = Field(default_factory=list)
     feed_type: str = "news"
     published_at: str = ""
+    data_publicacao: str = ""
     summary: str = ""
     url: str = ""
     trend_score: int = 50
     confidence: str = "Notícia / Imprensa"
+    status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
     suggested_angle: str = ""
     already_covered: bool = False
 
@@ -118,13 +122,19 @@ class SceneItem(BaseModel):
 
 class ShortsProject(BaseModel):
     id: str
+    revision: int = 1
+    publish_intent: Literal["commercial", "editorial", "non_commercial"] = "commercial"
     niche: Literal["music_history", "gaming_news"] = "gaming_news"
     # Core GTA 6 fields
     title: str = ""
     game: str = "GTA 6"
     topic_angle: str = ""
     topic_source_url: str = ""
+    fonte_primaria: str = ""
+    fontes_secundarias: list[str] = Field(default_factory=list)
+    data_publicacao: str = ""
     fact_confidence: str = "Notícia / Imprensa"
+    status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
     max_duration_sec: float = 58.0
     speech_rate: str = "+14%"
     viral_archetype: str = "auto"
@@ -228,7 +238,11 @@ class CreateProjectRequest(BaseModel):
     genre: str = "Games / GTA 6"
     topic_angle: str = ""
     topic_source_url: str = ""
+    fonte_primaria: str = ""
+    fontes_secundarias: list[str] = Field(default_factory=list)
+    data_publicacao: str = ""
     fact_confidence: str = "Notícia / Imprensa"
+    status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
     max_duration_sec: float = 58.0
     speech_rate: str = "+14%"
     viral_archetype: str = "auto"

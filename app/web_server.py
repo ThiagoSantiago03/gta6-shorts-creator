@@ -126,27 +126,50 @@ def _load_project(project_id: str) -> MusicStoryProject:
     raise HTTPException(status_code=500, detail="Arquivo de projeto corrompido e sem backup válido.")
 
 
+_PROJECT_LOCKS: dict[str, threading.RLock] = {}
+_PROJECT_LOCKS_GUARD = threading.Lock()
+
+
+def _get_project_lock(project_id: str) -> threading.RLock:
+    with _PROJECT_LOCKS_GUARD:
+        if project_id not in _PROJECT_LOCKS:
+            _PROJECT_LOCKS[project_id] = threading.RLock()
+        return _PROJECT_LOCKS[project_id]
+
+
 def _save_project(project: MusicStoryProject) -> MusicStoryProject:
-    project.updated_at = datetime.now(timezone.utc).isoformat()
-    pdir = _project_dir(project.id)
-    pdir.mkdir(parents=True, exist_ok=True)
-    target_file = pdir / "project.json"
-    bak_file = pdir / "project.json.bak"
-    tmp_file = pdir / f"project.json.tmp.{uuid.uuid4().hex[:6]}"
+    lock = _get_project_lock(project.id)
+    with lock:
+        project.revision += 1
+        project.updated_at = datetime.now(timezone.utc).isoformat()
+        pdir = _project_dir(project.id)
+        pdir.mkdir(parents=True, exist_ok=True)
+        target_file = pdir / "project.json"
+        bak_file = pdir / "project.json.bak"
+        tmp_file = pdir / f"project.json.tmp.{uuid.uuid4().hex[:6]}"
 
-    tmp_file.write_text(
-        project.model_dump_json(indent=2),
-        encoding="utf-8",
-    )
+        tmp_file.write_text(
+            project.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
 
-    if target_file.exists() and target_file.stat().st_size > 0:
+        if target_file.exists() and target_file.stat().st_size > 0:
+            try:
+                shutil.copy2(target_file, bak_file)
+            except Exception as exc:
+                logger.warning("Falha ao criar backup %s: %s", bak_file, exc)
+
         try:
-            shutil.copy2(target_file, bak_file)
-        except Exception as exc:
-            logger.warning("Falha ao criar backup %s: %s", bak_file, exc)
+            tmp_file.replace(target_file)
+        except OSError:
+            if target_file.exists():
+                try:
+                    target_file.unlink()
+                except OSError as exc:
+                    logger.warning("Falha ao remover arquivo alvo antes de replace: %s", exc)
+            tmp_file.replace(target_file)
 
-    tmp_file.replace(target_file)
-    return project
+        return project
 
 
 def _set_job(project_id: str, state: str, progress: int, message: str, error: str | None = None) -> None:
@@ -419,7 +442,15 @@ def create_batch_daily(req: BatchDailyRequest) -> dict[str, Any]:
     if not items:
         raise HTTPException(status_code=404, detail="Nenhuma pauta encontrada no radar.")
 
-    selected = items[: max(1, min(req.count, 10))]
+    valid_items = [
+        it for it in items
+        if getattr(it, "status_confiabilidade", "") != "nao_verificado"
+        and it.confidence not in ("Não verificado", "nao_verificado")
+    ]
+    if not valid_items:
+        raise HTTPException(status_code=404, detail="Nenhuma pauta com confiabilidade verificada encontrada para o lote.")
+
+    selected = valid_items[: max(1, min(req.count, 10))]
     created_projects = []
     failures = []
 
@@ -455,7 +486,11 @@ def create_batch_daily(req: BatchDailyRequest) -> dict[str, Any]:
                 genre="Games / GTA 6",
                 topic_angle=str(g_data.get("resolved_angle") or item.suggested_angle or ""),
                 topic_source_url=item.url or "",
+                fonte_primaria=getattr(item, "fonte_primaria", "") or item.source or "",
+                fontes_secundarias=getattr(item, "fontes_secundarias", []) or [],
+                data_publicacao=getattr(item, "data_publicacao", "") or item.published_at or "",
                 fact_confidence=item.confidence or "Notícia / Imprensa",
+                status_confiabilidade=getattr(item, "status_confiabilidade", "reportado"),
                 max_duration_sec=58.0,
                 speech_rate="+14%",
                 viral_archetype=str(g_data.get("viral_archetype") or "auto"),
@@ -766,20 +801,28 @@ def toggle_project_posted(project_id: str, body: TogglePostedBody = TogglePosted
 def update_project(project_id: str, updated: MusicStoryProject) -> dict[str, Any]:
     if updated.id != project_id:
         raise HTTPException(status_code=400, detail="ID incompatível.")
-    existing = _load_project(project_id)
-    updated.outputs = existing.outputs
-    updated.qa_report = existing.qa_report
-    if updated.posted_at is None and existing.posted_at is not None:
-        updated.is_posted = existing.is_posted
-        updated.posted_at = existing.posted_at
-        updated.posted_platform = existing.posted_platform
-        updated.posted_url = existing.posted_url
-        updated.posted_notes = existing.posted_notes
-    updated.narration_full = " ".join(
-        s.narration_text.strip() for s in updated.scenes if s.narration_text.strip()
-    )
-    _save_project(updated)
-    return updated.model_dump()
+    lock = _get_project_lock(project_id)
+    with lock:
+        existing = _load_project(project_id)
+        if updated.revision != existing.revision:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Conflito de versão (HTTP 409): o projeto '{project_id}' foi modificado concorrentemente (revisão enviada: {updated.revision}, atual: {existing.revision}). Recarregue os dados e tente novamente."
+            )
+        updated.revision = existing.revision
+        updated.outputs = existing.outputs
+        updated.qa_report = existing.qa_report
+        if updated.posted_at is None and existing.posted_at is not None:
+            updated.is_posted = existing.is_posted
+            updated.posted_at = existing.posted_at
+            updated.posted_platform = existing.posted_platform
+            updated.posted_url = existing.posted_url
+            updated.posted_notes = existing.posted_notes
+        updated.narration_full = " ".join(
+            s.narration_text.strip() for s in updated.scenes if s.narration_text.strip()
+        )
+        _save_project(updated)
+        return updated.model_dump()
 
 
 @app.delete("/api/projects/{project_id}")

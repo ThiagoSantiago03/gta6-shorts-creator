@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import hashlib
 import html as _html
 import json
@@ -626,6 +627,10 @@ def download_news_video_segment(
         finally:
             tmp_raw.unlink(missing_ok=True)
         if out_mp4.exists() and out_mp4.stat().st_size > 30_000:
+            try:
+                _register_downloaded_clip_in_catalog(out_mp4, vurl, video_spec)
+            except Exception as exc:
+                logger.warning("Falha ao registrar clipe baixado no catálogo: %s", exc)
             return out_mp4
         return None
 
@@ -655,6 +660,10 @@ def download_news_video_segment(
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=42)
         if out_mp4.exists() and out_mp4.stat().st_size > 30_000 and get_audio_duration(out_mp4) >= 1.8:
+            try:
+                _register_downloaded_clip_in_catalog(out_mp4, vurl, video_spec)
+            except Exception as exc:
+                logger.warning("Falha ao registrar clipe baixado no catálogo: %s", exc)
             return out_mp4
     except Exception as exc:
         logger.warning("Falha ao executar download com yt-dlp: %s", exc)
@@ -899,6 +908,19 @@ def _collect_interleaved_cuts(project: MusicStoryProject, max_clips_per_video: i
     if not attached:
         return []
 
+    publish_intent = getattr(project, "publish_intent", "commercial") or "commercial"
+    if publish_intent == "commercial":
+        filtered_attached: list[Path] = []
+        for p in attached:
+            entry = get_media_catalog_entry(p.name)
+            if entry and (not entry.get("commercial_use_allowed", False) or entry.get("authorization_status") in ("unknown", "restricted", "review_required", "non_commercial_only")):
+                logger.warning("Clipe anexado '%s' rejeitado para projeto commercial por licença.", p.name)
+                continue
+            filtered_attached.append(p)
+        attached = filtered_attached
+        if not attached:
+            return []
+
     per_file_cuts: list[list[dict[str, Any]]] = []
     for vp in attached[:6]:
         cuts = index_trailer_scenes(vp, max_clips=max_clips_per_video)
@@ -955,10 +977,16 @@ def _collect_library_trailer_cuts(project: MusicStoryProject, max_clips_per_vide
     if not is_gta_topic or not GTA6_INPUTS_DIR.exists():
         return []
 
+    publish_intent = getattr(project, "publish_intent", "commercial") or "commercial"
     per_file_cuts: list[list[dict[str, Any]]] = []
     for p in sorted(GTA6_INPUTS_DIR.iterdir()):
         if not p.is_file() or p.suffix.lower() not in VIDEO_EXTS:
             continue
+        if publish_intent == "commercial":
+            entry = get_media_catalog_entry(p.name)
+            if not entry or not entry.get("commercial_use_allowed", False) or entry.get("authorization_status") in ("unknown", "restricted", "review_required", "non_commercial_only"):
+                logger.info("Omitindo clipe de biblioteca '%s' em projeto comercial (licença não comercial).", p.name)
+                continue
         cuts = index_trailer_scenes(p, max_clips=max_clips_per_video)
         if not cuts:
             continue
@@ -1457,6 +1485,18 @@ def auto_select_gaming_soundtrack(
     if filtered:
         pool = filtered
 
+    publish_intent = getattr(project, "publish_intent", "commercial") or "commercial"
+    if publish_intent == "commercial":
+        comm_pool = []
+        for track in pool:
+            entry = get_media_catalog_entry(track.name)
+            if entry and entry.get("commercial_use_allowed", False) and entry.get("authorization_status") not in ("unknown", "restricted", "review_required", "non_commercial_only"):
+                comm_pool.append(track)
+        if comm_pool:
+            pool = comm_pool
+        else:
+            logger.warning("Nenhuma trilha sonora com licença comercial verificada encontrada no pool.")
+
     topic_blob = f"{project.song_title} {project.topic_angle} {project.narration_full}".lower()
     mood_groups = [
         (("trailer", "estrada", "mapa", "leonida", "highway", "rock", "carro"), ("rock", "estrada", "highway", "heartland", "arena", "guitar")),
@@ -1501,6 +1541,57 @@ def load_media_catalog() -> dict[str, Any]:
     return {"version": "1.0", "items": []}
 
 
+def save_media_catalog(catalog: dict[str, Any]) -> None:
+    catalog_path = INPUTS_DIR / "media_catalog.json"
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _register_downloaded_clip_in_catalog(
+    out_mp4: Path,
+    source_url: str,
+    video_spec: dict[str, Any],
+) -> None:
+    """Register downloaded 3rd-party video cut into media_catalog.json with review_required status."""
+    cat = load_media_catalog()
+    items = cat.setdefault("items", [])
+    fn = out_mp4.name
+    for it in items:
+        if str(it.get("filename", "")).lower() == fn.lower():
+            return
+    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    new_entry = {
+        "media_id": f"dl_{out_mp4.stem}",
+        "filename": fn,
+        "file_path": str(out_mp4).replace("\\", "/"),
+        "media_type": "video",
+        "source_url": source_url,
+        "source_type": "downloaded_third_party_clip",
+        "copyright_owner": video_spec.get("source") or "Desconhecido / Terceiro",
+        "license_type": "desconhecido",
+        "authorization_status": "review_required",
+        "commercial_use_allowed": False,
+        "attribution_required": True,
+        "attribution_text": f"Trecho de vídeo via {video_spec.get('source') or source_url}",
+        "allowed_platforms": ["youtube_shorts"],
+        "proof_url": source_url,
+        "sha256": "",
+        "verified_at": now_str,
+        "risk_level": "alto",
+        "usage_notes": "Clipe de notícia baixado automaticamente. Bloqueado para uso comercial até revisão e licenciamento.",
+        "history": [
+            {
+                "action": "auto_download",
+                "date": now_str,
+                "notes": f"Download de trecho a partir de {source_url}",
+            }
+        ],
+    }
+    items.append(new_entry)
+    save_media_catalog(cat)
+    logger.info("Clipe baixado '%s' registrado no media_catalog.json com status 'review_required'.", fn)
+
+
 def get_media_catalog_entry(identifier: str | Path | None) -> dict[str, Any] | None:
     if not identifier:
         return None
@@ -1540,8 +1631,13 @@ def record_project_used_media(project: MusicStoryProject) -> list[dict[str, Any]
                 "source_type": entry.get("source_type", "ambient_soundtrack") if entry else "ambient_soundtrack",
                 "copyright_owner": entry.get("copyright_owner", "Desconhecido / Trilha Local") if entry else "Desconhecido / Trilha Local",
                 "license_type": entry.get("license_type", "royalty_free_unverified") if entry else "royalty_free_unverified",
+                "authorization_status": entry.get("authorization_status", "review_required") if entry else "unknown",
                 "commercial_use_allowed": entry.get("commercial_use_allowed", False) if entry else False,
                 "attribution_required": entry.get("attribution_required", True) if entry else True,
+                "attribution_text": entry.get("attribution_text", "") if entry else "",
+                "allowed_platforms": entry.get("allowed_platforms", ["youtube_shorts"]) if entry else ["youtube_shorts"],
+                "proof_url": entry.get("proof_url", "") if entry else "",
+                "sha256": entry.get("sha256", "") if entry else "",
                 "risk_level": entry.get("risk_level", "alto") if entry else "alto",
                 "usage_notes": entry.get("usage_notes", "Trilha sonora sem registro formal de licença no catálogo.") if entry else "Trilha sonora sem registro formal de licença no catálogo.",
                 "scenes_used": [s.index for s in project.scenes],
@@ -1566,6 +1662,7 @@ def record_project_used_media(project: MusicStoryProject) -> list[dict[str, Any]
             is_trailer = any(k in t_name.lower() for k in ("trailer", "gta", "rockstar"))
             default_owner = "Rockstar Games / Take-Two Interactive" if is_trailer else "Desconhecido"
             default_license = "promotional_fair_use" if is_trailer else "desconhecido"
+            default_auth = "official_permission" if is_trailer else "unknown"
             default_risk = "medio" if is_trailer else "alto"
             used.append({
                 "media_id": mid,
@@ -1575,8 +1672,13 @@ def record_project_used_media(project: MusicStoryProject) -> list[dict[str, Any]
                 "source_type": entry.get("source_type", "trailer_cut" if is_vid else "image") if entry else "desconhecido",
                 "copyright_owner": entry.get("copyright_owner", default_owner) if entry else default_owner,
                 "license_type": entry.get("license_type", default_license) if entry else default_license,
+                "authorization_status": entry.get("authorization_status", default_auth) if entry else default_auth,
                 "commercial_use_allowed": entry.get("commercial_use_allowed", False) if entry else False,
                 "attribution_required": entry.get("attribution_required", True) if entry else True,
+                "attribution_text": entry.get("attribution_text", "") if entry else "",
+                "allowed_platforms": entry.get("allowed_platforms", ["youtube_shorts"]) if entry else ["youtube_shorts"],
+                "proof_url": entry.get("proof_url", "") if entry else "",
+                "sha256": entry.get("sha256", "") if entry else "",
                 "risk_level": entry.get("risk_level", default_risk) if entry else default_risk,
                 "usage_notes": entry.get("usage_notes", "Uso em corte de fundo vertical transformativo com locução.") if entry else "Mídia sem anotação prévia no catálogo.",
                 "scenes_used": [sc.index],

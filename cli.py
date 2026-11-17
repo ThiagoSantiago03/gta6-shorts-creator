@@ -144,15 +144,24 @@ def cmd_create(args: argparse.Namespace) -> None:
 def cmd_batch(args: argparse.Namespace) -> None:
     count = max(1, min(args.count, 10))
     print(f"Iniciando criação autônoma em lote de {count} Shorts de GTA 6...")
-    items = fetch_daily_gaming_radar(query="GTA 6", geo="BR")[:count]
+    items = fetch_daily_gaming_radar(query="GTA 6", geo="BR")
     if not items:
         print("Nenhuma pauta encontrada no radar.")
+        return
+
+    valid_items = [
+        it for it in items
+        if getattr(it, "status_confiabilidade", "") != "nao_verificado"
+        and it.confidence not in ("Não verificado", "nao_verificado")
+    ][:count]
+    if not valid_items:
+        print("Nenhuma pauta com confiabilidade verificada encontrada para o lote.")
         return
 
     success_count = 0
     failure_count = 0
 
-    for idx, it in enumerate(items, 1):
+    for idx, it in enumerate(valid_items, 1):
         print(f"\n--- [{idx}/{count}] Criando: {it.title} ---")
         try:
             pid = f"gta6-{_slugify(it.title)}-{uuid.uuid4().hex[:6]}"
@@ -188,6 +197,11 @@ def cmd_batch(args: argparse.Namespace) -> None:
                 genre="Games / GTA 6",
                 topic_angle=str(g_data.get("resolved_angle") or it.suggested_angle or ""),
                 topic_source_url=it.url,
+                fonte_primaria=getattr(it, "fonte_primaria", "") or it.source or "",
+                fontes_secundarias=getattr(it, "fontes_secundarias", []) or [],
+                data_publicacao=getattr(it, "data_publicacao", "") or it.published_at or "",
+                fact_confidence=it.confidence or "Notícia / Imprensa",
+                status_confiabilidade=getattr(it, "status_confiabilidade", "reportado"),
                 max_duration_sec=58.0,
                 speech_rate="+14%",
                 viral_archetype="auto",

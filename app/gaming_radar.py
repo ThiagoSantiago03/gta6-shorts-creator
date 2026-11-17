@@ -257,36 +257,71 @@ def _existing_covered_blobs() -> list[str]:
     return blobs
 
 
+_DEDUP_STOP_WORDS = {
+    "gta", "gta6", "gtavi", "grand", "theft", "auto", "rockstar", "games", "take", "two",
+    "taketwo", "sobre", "entre", "agora", "todos", "tudo", "para", "com", "uma", "mais",
+    "como", "pode", "novo", "nova", "novos", "novas", "ser", "que", "dos", "das", "pelo",
+    "pela", "pelos", "pelas", "segundo", "apos", "após", "diz", "revela", "confirma",
+    "está", "estao", "estão", "jogo", "game", "games", "esse", "essa", "esses", "essas"
+}
+
+
+def extract_significant_tokens(text: str) -> set[str]:
+    raw_words = re.findall(r"\b[a-zA-Z0-9À-ÿ]{3,}\b", (text or "").lower())
+    return {w for w in raw_words if w not in _DEDUP_STOP_WORDS}
+
+
+def calculate_token_similarity(tokens1: set[str], tokens2: set[str]) -> float:
+    if not tokens1 or not tokens2:
+        return 0.0
+    intersection = tokens1.intersection(tokens2)
+    union = tokens1.union(tokens2)
+    return len(intersection) / len(union)
+
+
 def _is_already_covered(title: str, covered_blobs: list[str]) -> bool:
-    tokens = [w for w in re.split(r"[\W_]+", title.lower()) if len(w) >= 5 and w not in {"sobre", "entre", "agora", "todos", "tudoo"}]
-    if len(tokens) < 3:
+    tokens = extract_significant_tokens(title)
+    if len(tokens) < 2:
         return False
     for blob in covered_blobs:
-        hits = sum(1 for tok in tokens[:6] if tok in blob)
-        if hits >= 3:
+        hits = sum(1 for tok in tokens if tok in blob)
+        if hits >= 2 and hits / len(tokens) >= 0.5:
             return True
     return False
 
 
-def _classify_confidence(title: str, source: str) -> str:
+def classify_confidence_and_status(title: str, source: str) -> tuple[str, str]:
+    """
+    Classify a news topic into 4 official classes (M-02 / Tarefa 1.3):
+    1. 'confirmado' / 'Oficial / Confirmado': Rockstar Newswire, Take-Two direct or official releases without doubt.
+    2. 'reportado' / 'Notícia / Imprensa': Reputable press (IGN, Bloomberg, etc.) reporting verified information.
+    3. 'rumor' / 'Rumor / Não verificado': Leaks, rumors, speculation, reddit/twitter unverified leaks.
+    4. 'nao_verificado' / 'Não verificado': Dubious sources, unverified clickbait, or opinion with no source.
+    """
     title_low = (title or "").lower()
     source_low = (source or "").lower()
 
     # 1. Qualquer indício de dúvida, rumor ou vazamento rebaixa imediatamente para Rumor
     if any(k in title_low for k in _UNCERTAINTY_KEYWORDS):
-        return "Rumor / Não verificado"
+        return "Rumor / Não verificado", "rumor"
 
     # 2. Oficial / Confirmado estrito (canais diretos ou confirmação expressa sem dúvida)
-    if any(src in source_low for src in _OFFICIAL_DIRECT_SOURCES):
-        return "Oficial / Confirmado"
-    if any(k in title_low for k in _OFFICIAL_TITLE_KEYWORDS):
-        return "Oficial / Confirmado"
+    if any(src in source_low for src in _OFFICIAL_DIRECT_SOURCES) or any(k in title_low for k in _OFFICIAL_TITLE_KEYWORDS):
+        return "Oficial / Confirmado", "confirmado"
 
     # 3. Imprensa especializada e cobertura jornalística
     if any(src in source_low for src in _PRESS_SOURCES):
-        return "Notícia / Imprensa"
+        return "Notícia / Imprensa", "reportado"
 
-    return "Análise / Tendência"
+    # 4. Análise / Tendência ou não verificado
+    if not source_low or source_low in ("desconhecido", "desconhecida", "fórum", "forum", "internet", "web"):
+        return "Não verificado", "nao_verificado"
+
+    return "Análise / Tendência", "nao_verificado"
+
+
+def _classify_confidence(title: str, source: str) -> str:
+    return classify_confidence_and_status(title, source)[0]
 
 
 def _suggest_angle(title: str) -> str:
@@ -550,25 +585,53 @@ def fetch_daily_gaming_radar(query: str = "GTA 6", geo: str = "BR") -> list[Topi
                 )
             )
 
-    # When deduplicating similar titles, prefer items with direct non-Google-News URLs
-    dedup_map: dict[str, TopicTrendItem] = {}
+    # When deduplicating similar titles, prefer items with direct non-Google-News URLs and cluster rewrites (M-02)
+    dedup_list: list[TopicTrendItem] = []
     for it in combined:
         norm = re.sub(r"[^\w]+", "", it.title.lower())[:34]
         if not norm:
             continue
+
+        # Populate primary source, publication date and 4-class reliability
+        it.fonte_primaria = it.source or "Google News / Web"
+        it.data_publicacao = it.published_at or ""
+        conf_str, status_str = classify_confidence_and_status(it.title, it.source)
+        it.confidence = conf_str
+        it.status_confiabilidade = status_str
         it.already_covered = _is_already_covered(it.title, covered)
-        existing = dedup_map.get(norm)
-        if existing is None:
-            dedup_map[norm] = it
+
+        it_tokens = extract_significant_tokens(it.title)
+
+        # Check against existing items in dedup_list for rewrites / similar pautas
+        match_idx = None
+        for idx_e, existing in enumerate(dedup_list):
+            ex_norm = re.sub(r"[^\w]+", "", existing.title.lower())[:34]
+            if norm == ex_norm:
+                match_idx = idx_e
+                break
+            ex_tokens = extract_significant_tokens(existing.title)
+            sim = calculate_token_similarity(it_tokens, ex_tokens)
+            if sim >= 0.40 and len(it_tokens.intersection(ex_tokens)) >= 2:
+                match_idx = idx_e
+                break
+
+        if match_idx is None:
+            dedup_list.append(it)
         else:
+            existing = dedup_list[match_idx]
+            # Record secondary source if distinct
+            if it.source and it.source != existing.fonte_primaria and it.source not in existing.fontes_secundarias:
+                existing.fontes_secundarias.append(it.source)
             cur_direct = "news.google.com" not in (it.url or "")
             old_direct = "news.google.com" not in (existing.url or "")
             if (cur_direct and not old_direct) or (cur_direct == old_direct and it.trend_score > existing.trend_score):
                 if len(existing.summary or "") > len(it.summary or "") and "google news" not in (existing.source or "").lower():
                     it.summary = existing.summary
-                dedup_map[norm] = it
+                merged_sec = list(dict.fromkeys(existing.fontes_secundarias + ([existing.fonte_primaria] if existing.fonte_primaria != it.source else [])))
+                it.fontes_secundarias = [s for s in merged_sec if s and s != it.source]
+                dedup_list[match_idx] = it
 
-    dedup = list(dedup_map.values())
+    dedup = dedup_list
     dedup.sort(key=lambda x: (not x.already_covered, x.trend_score), reverse=True)
     top_items = dedup[:18]
 

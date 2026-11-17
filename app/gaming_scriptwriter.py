@@ -195,20 +195,55 @@ def _topic_visual_queries(
     return (f"{game} official trailer scene", f"{game} official gameplay scenes")
 
 
-def _build_viral_hook(archetype: str, clean_topic: str, game_name: str, facts: list[str]) -> tuple[str, str]:
+def _sanitize_for_rumor(text: str) -> str:
+    """Replace unconditional affirmative statements with conditional/rumor phrasing (M-02)."""
+    subs = [
+        (r"\ba Rockstar confirmou\b", "segundo rumores recentes que circulam na comunidade"),
+        (r"\ba Rockstar divulgou\b", "segundo vazamentos que circulam na internet"),
+        (r"\bconfirmad[oa] pela Rockstar\b", "ainda não confirmado oficialmente pela Rockstar"),
+        (r"\bconfirmad[oa] oficialmente\b", "segundo apurações e vazamentos"),
+        (r"\blançamento oficial está confirmado\b", "segundo rumores, a previsão de lançamento seria"),
+        (r"\bé oficial:\b", "segundo rumores:"),
+        (r"\bVazaram os números reais\b", "Circulam boatos sobre os supostos custos"),
+        (r"\bos números reais\b", "as supostas estimativas"),
+        (r"\bA data oficial está confirmada\b", "Um suposto cronograma tem sido debatido"),
+        (r"\bO lançamento oficial está confirmado\b", "Especula-se uma janela de lançamento"),
+        (r"\bse liga no que a Rockstar confirmou!\b", "se liga no que anda circulando nos fóruns!"),
+        (r"\bA grande novidade confirmada revela que\b", "Segundo os rumores mais comentados da comunidade,"),
+    ]
+    res = text
+    for pattern, repl in subs:
+        res = re.sub(pattern, repl, res, flags=re.IGNORECASE)
+    return res
+
+
+def _build_viral_hook(archetype: str, clean_topic: str, game_name: str, facts: list[str], is_rumor: bool = False) -> tuple[str, str]:
     low = clean_topic.lower()
     fact_blob = f"{clean_topic} {' '.join(facts[:3])}".lower()
 
     if any(w in fact_blob for w in ("custo", "orçamento", "bilhão", "bilhões", "caro", "gasto", "dinheiro")):
-        return f"ORÇAMENTO • {game_name.upper()}", f"Vazaram os números reais da produção de {game_name} — e o custo total dessa história tá deixando todo mundo em choque!"
+        if is_rumor:
+            return f"RUMOR • CUSTO", f"Circulam novos rumores sobre os supostos custos de {game_name} — e os valores estão deixando todo mundo em choque!"
+        return f"ORÇAMENTO • {game_name.upper()}", f"Vazaram os números da produção de {game_name} — e o custo total dessa história tá deixando todo mundo em choque!"
     if any(w in fact_blob for w in ("polícia", "policia", "k9", "cães", "perseguição", "tiro")):
-        return f"POLÍCIA • {game_name.upper()}", f"A polícia de {game_name} vai ser a mais perigosa de toda a franquia — se liga no que a Rockstar confirmou!"
+        if is_rumor:
+            return f"RUMOR • POLÍCIA", f"A polícia de {game_name} pode ser a mais perigosa de toda a franquia — se liga nos supostos vazamentos!"
+        return f"POLÍCIA • {game_name.upper()}", f"A polícia de {game_name} vai ser a mais perigosa de toda a franquia — se liga no que os materiais indicam!"
     if any(w in fact_blob for w in ("data de lançamento", "versão para pc", "versão de pc", "adiamento", "adiado", "disco físico")):
-        return f"LANÇAMENTO • {game_name.upper()}", f"{game_name} já tem janela e plataformas confirmadas — mas tem uma notícia tensa que você precisa saber agora!"
+        if is_rumor:
+            return f"RUMOR • LANÇAMENTO", f"Novos boatos sobre o lançamento de {game_name} agitam as redes — se liga no que vazou!"
+        return f"LANÇAMENTO • {game_name.upper()}", f"{game_name} tem novas movimentações de cronograma — e tem um detalhe tenso que você precisa saber agora!"
     if any(w in fact_blob for w in ("mapa", "leonida", "vice city", "tamanho do mapa", "locais")):
+        if is_rumor:
+            return f"RUMOR • MAPA", f"Supostos detalhes do mapa de {game_name} vazaram — e o tamanho desse mundo aberto pode ser colossal!"
         return f"MAPA • {game_name.upper()}", f"Novos detalhes do mapa colossal de {game_name} foram revelados — e o tamanho desse mundo aberto vai te impressionar!"
     if any(w in fact_blob for w in ("gráficos", "física", "60 fps", "ray tracing", "rage", "água")):
         return f"GRÁFICOS • {game_name.upper()}", f"A tecnologia gráfica e física de {game_name} está deixando desenvolvedores do mundo inteiro de boca aberta!"
+
+    if is_rumor:
+        badge = f"RUMOR • {game_name.upper()}"
+        hook = f"Um rumor que ganhou força hoje sobre {clean_topic} tá mexendo com a comunidade — se liga nos detalhes!"
+        return badge, hook
 
     if archetype == "contraste_detalhe":
         badge = f"ALERTA • {game_name.upper()}"
@@ -219,11 +254,11 @@ def _build_viral_hook(archetype: str, clean_topic: str, game_name: str, facts: l
         num_hit = re.search(r"\b(R\$\s?\d+[\.,]?\d*|US\$\s?\d+[\.,]?\d*|\d+[\.,]?\d*\s?(?:GB|TB|FPS|horas|bilhões|milhões))\b", fact_blob, re.I)
         num_tag = num_hit.group(1) if num_hit else ""
         badge = f"RAIO-X • {num_tag.upper() or game_name.upper()}"
-        hook = f"Olha os números oficiais dessa novidade em {game_name}: a conta final vai surpreender todo mundo!"
+        hook = f"Olha os números divulgados dessa novidade em {game_name}: a conta final vai surpreender todo mundo!"
         return badge, hook
 
     badge = f"REVELAÇÃO • {game_name.upper()}"
-    hook = f"Uma novidade pesada sobre {clean_topic} acabou de sair hoje — e quem tá esperando o lançamento precisa ver isso!"
+    hook = f"Uma novidade sobre {clean_topic} acabou de sair hoje — e quem tá esperando o lançamento precisa ver isso!"
     return badge, hook
 
 
@@ -269,6 +304,7 @@ def synthesize_gaming_short_script(
     raw_facts: list[str] = [str(f).strip() for f in (dossier.get("article_facts") or []) if str(f).strip()]
 
     combined_text = f"{clean_topic} {clean_angle} {art_summary} {' '.join(raw_facts)}".lower()
+    is_rumor = any(k in str(fact_confidence).lower() for k in ("rumor", "vaza", "especula", "não verificado", "nao_verificado"))
     archetype = _pick_viral_archetype(clean_topic, combined_text, requested=viral_archetype)
     effects = ["zoom_in", "pan_right", "zoom_out", "pan_left", "zoom_in", "zoom_out"]
 
@@ -351,17 +387,22 @@ def synthesize_gaming_short_script(
             ]
             cleaned_facts.append(defaults[len(cleaned_facts)])
 
-        hook_badge, hook_text = _build_viral_hook(archetype, clean_topic, game_name, cleaned_facts)
+        hook_badge, hook_text = _build_viral_hook(archetype, clean_topic, game_name, cleaned_facts, is_rumor=is_rumor)
         cta_text = _build_binary_cta(archetype, clean_topic, " ".join(cleaned_facts), game_name)
 
+        first_connector = "Segundo os rumores e vazamentos mais comentados," if is_rumor else "A grande novidade confirmada revela que"
         scenes_spec = [
             {"title": hook_badge, "text": hook_text},
-            {"title": "O Que Saiu", "text": _humanize_fact(cleaned_facts[0], connector="A grande novidade confirmada revela que")},
+            {"title": "O Que Saiu" if not is_rumor else "O Que Está Circulando", "text": _humanize_fact(cleaned_facts[0], connector=first_connector)},
             {"title": "Na Prática", "text": _humanize_fact(cleaned_facts[1], connector="Pra entender o impacto disso:")},
             {"title": "O Impacto Real", "text": _humanize_fact(cleaned_facts[2], connector="Na prática, tudo isso muda a experiência porque")},
-            {"title": "A Virada", "text": _humanize_fact(cleaned_facts[3], connector="Só que tem um detalhe importante: enquanto parte dos fãs comemora,")},
+            {"title": "A Virada", "text": _humanize_fact(cleaned_facts[3], connector="Só que tem um detalhe importante: enquanto parte dos fãs debate a veracidade,")},
             {"title": "Qual Você Escolhe?", "text": cta_text},
         ]
+
+    if is_rumor:
+        for sc in scenes_spec:
+            sc["text"] = _sanitize_for_rumor(sc["text"])
 
     raw_scenes: list[dict[str, Any]] = []
     for idx, sc in enumerate(scenes_spec, start=1):
@@ -393,11 +434,17 @@ def synthesize_gaming_short_script(
     if len(youtube_title) > 95:
         youtube_title = clean_topic[:84].rstrip(" .:-") + " #shorts"
 
-    source_credit = f"\nFonte consultada: {source_url}" if source_url else ""
+    source_credit = f"\nFonte: {source_url}" if source_url else ""
+    attribution_block = (
+        "\n\nCréditos & Fontes de Mídia:\n"
+        "- Imagens e recortes de vídeo utilizados para fins de comentário, análise crítica e cobertura de notícias (Fair Use promocional).\n"
+        "- Direitos autorais pertencem aos seus respectivos detentores."
+    )
     youtube_description = (
         f"{clean_topic}\n\n"
-        f"Resumo direto ao ponto sobre {game_name} ({fact_confidence})."
-        f"{source_credit}\n\n"
+        f"Cobertura direta sobre {game_name} ({fact_confidence})."
+        f"{source_credit}"
+        f"{attribution_block}\n\n"
         "#shorts #gta6 #grandtheftautovi #rockstargames #vicecity #gamesbrasil"
     )
     youtube_tags = [
@@ -421,6 +468,8 @@ def synthesize_gaming_short_script(
         "resolved_year": "2026",
         "resolved_genre": "Games / Notícias GTA 6",
         "viral_archetype": archetype,
+        "fact_confidence": fact_confidence,
+        "status_confiabilidade": "rumor" if is_rumor else ("confirmado" if "oficial" in fact_confidence.lower() or "confirmad" in fact_confidence.lower() else "reportado"),
         "hook_title": str(scenes[0].quote_text or clean_topic[:80]).upper(),
         "reel2_title": game_name,
         "reel2_subtitle": f"{fact_confidence} • YouTube Shorts",

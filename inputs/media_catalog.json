@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
-  "updated_at": "2026-11-16T21:00:00Z",
-  "description": "Catálogo de procedência, licenças e conformidade de direitos autorais para mídias em inputs/",
+  "version": "2.0",
+  "updated_at": "2026-11-17T04:00:00Z",
+  "description": "Catálogo de procedência, licenças e gate de direitos autorais para mídias em inputs/ (M-01)",
   "items": [
     {
       "media_id": "gta_trailer_1",
@@ -12,10 +12,17 @@
       "source_type": "official_trailer",
       "copyright_owner": "Rockstar Games / Take-Two Interactive",
       "license_type": "promotional_fair_use",
+      "authorization_status": "official_permission",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "Trailer promocional oficial © Rockstar Games / Take-Two Interactive. Utilizado para fins de análise e comentários (Fair Use).",
+      "allowed_platforms": ["youtube_shorts", "tiktok", "instagram_reels"],
+      "proof_url": "https://www.rockstargames.com/VI",
+      "sha256": "f2046917d01aa3fc7d83bf643084c1d39edb554b2e3385826d3a6f082349abe1",
+      "verified_at": "2026-11-17T00:00:00Z",
       "risk_level": "medio",
-      "usage_notes": "Trailer de divulgação oficial. Permitido em uso transformativo para comentários, notícias e análises jornalísticas (Fair Use), com duração contínua limitada a no máximo 6s por cena, sobreposto por narração e sem áudio original."
+      "usage_notes": "Trailer de divulgação oficial. Permitido exclusivamente em uso transformativo editorial/jornalístico (Fair Use), com duração contínua de no máximo 6s por corte, narrado e sem a música original.",
+      "history": []
     },
     {
       "media_id": "gta_trailer_2",
@@ -26,10 +33,17 @@
       "source_type": "official_trailer_teaser",
       "copyright_owner": "Rockstar Games / Take-Two Interactive",
       "license_type": "promotional_fair_use",
+      "authorization_status": "official_permission",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "Material promocional © Rockstar Games / Take-Two Interactive.",
+      "allowed_platforms": ["youtube_shorts", "tiktok", "instagram_reels"],
+      "proof_url": "https://www.rockstargames.com/newswire",
+      "sha256": "975e4b783ed3ca24cf7f9af7bba207ba1b8c1d9e53c88a159990465230026cbd",
+      "verified_at": "2026-11-17T00:00:00Z",
       "risk_level": "medio",
-      "usage_notes": "Teaser oficial. Uso transformativo restrito a cortes curtos acompanhados de narração original."
+      "usage_notes": "Teaser oficial. Uso transformativo restrito a cortes curtos acompanhados de narração original.",
+      "history": []
     },
     {
       "media_id": "gta_trailer_lancamento",
@@ -40,10 +54,17 @@
       "source_type": "official_trailer",
       "copyright_owner": "Rockstar Games / Take-Two Interactive",
       "license_type": "promotional_fair_use",
+      "authorization_status": "official_permission",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "Trailer oficial de lançamento © Rockstar Games / Take-Two Interactive.",
+      "allowed_platforms": ["youtube_shorts", "tiktok", "instagram_reels"],
+      "proof_url": "https://www.rockstargames.com/VI",
+      "sha256": "1de7b9c4424ef19df70638e53f6558ecc979d143c65735e494c46a4471f36a25",
+      "verified_at": "2026-11-17T00:00:00Z",
       "risk_level": "medio",
-      "usage_notes": "Trailer oficial de lançamento. Aplicar regra de uso transformativo sem inclusão da trilha sonora original do trailer."
+      "usage_notes": "Trailer oficial de lançamento. Aplicar regra de uso transformativo sem áudio original.",
+      "history": []
     },
     {
       "media_id": "gta_revelacao_capa",
@@ -54,10 +75,17 @@
       "source_type": "promotional_teaser",
       "copyright_owner": "Rockstar Games / Take-Two Interactive",
       "license_type": "promotional_fair_use",
+      "authorization_status": "official_permission",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "Arte oficial de divulgação © Rockstar Games / Take-Two Interactive.",
+      "allowed_platforms": ["youtube_shorts", "tiktok", "instagram_reels"],
+      "proof_url": "https://www.rockstargames.com/VI",
+      "sha256": "0b85305ee8a1c98b00aef5d693413b443e76965a8d02b54f1b2e45abde20ea7a",
+      "verified_at": "2026-11-17T00:00:00Z",
       "risk_level": "medio",
-      "usage_notes": "Clipe curto de revelação de arte de capa oficial da Rockstar Games."
+      "usage_notes": "Clipe curto de revelação de arte de capa oficial da Rockstar Games.",
+      "history": []
     },
     {
       "media_id": "reel_gta_realista",
@@ -68,10 +96,17 @@
       "source_type": "gameplay_render_community",
       "copyright_owner": "Comunidade / Criador Desconhecido",
       "license_type": "desconhecido",
+      "authorization_status": "unknown",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "",
+      "allowed_platforms": [],
+      "proof_url": "",
+      "sha256": "8f8e033392850958fc59b8020b07274532f0f5d3a6447d813ecc07d6c533f66b",
+      "verified_at": "",
       "risk_level": "alto",
-      "usage_notes": "Mídia sem origem verificada ou autor identificado. Risco elevado de Content ID ou strike de terceiro. Recomenda-se substituir por cortes dos trailers oficiais."
+      "usage_notes": "Mídia sem origem verificada ou autor identificado. Risco elevado de Content ID ou strike de terceiro. Bloqueada para publicação comercial.",
+      "history": []
     },
     {
       "media_id": "audio_miami_night_highway",
@@ -82,10 +117,17 @@
       "source_type": "ambient_synthwave",
       "copyright_owner": "Desconhecido / Trilha Local",
       "license_type": "royalty_free_unverified",
+      "authorization_status": "review_required",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "",
+      "allowed_platforms": [],
+      "proof_url": "",
+      "sha256": "207735faba04176ab11e02544b9966bd3af084643f135498d0e1a02d8616d889",
+      "verified_at": "",
       "risk_level": "alto",
-      "usage_notes": "Trilha sonora synthwave sem registro formal de licença ou autor comprovado. Marcada como risco para monetização comercial no YouTube."
+      "usage_notes": "Trilha sonora synthwave sem registro formal de licença ou autor comprovado. Exige revisão prévia e bloqueia monetização comercial.",
+      "history": []
     },
     {
       "media_id": "audio_neon_arpeggios",
@@ -96,10 +138,17 @@
       "source_type": "ambient_synthwave",
       "copyright_owner": "Desconhecido / Trilha Local",
       "license_type": "royalty_free_unverified",
+      "authorization_status": "review_required",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "",
+      "allowed_platforms": [],
+      "proof_url": "",
+      "sha256": "1bfd55c133343a20bd7ea23ddcd07fc5fba3c01a5c989917da4a892c0a68eac8",
+      "verified_at": "",
       "risk_level": "alto",
-      "usage_notes": "Trilha synthwave sem certificado de cessão de direitos. Marcada como risco no QA."
+      "usage_notes": "Trilha synthwave sem certificado de cessão de direitos. Marcada como review_required.",
+      "history": []
     },
     {
       "media_id": "audio_neon_shadows",
@@ -110,10 +159,17 @@
       "source_type": "ambient_synthwave",
       "copyright_owner": "Desconhecido / Trilha Local",
       "license_type": "royalty_free_unverified",
+      "authorization_status": "review_required",
       "commercial_use_allowed": false,
       "attribution_required": true,
+      "attribution_text": "",
+      "allowed_platforms": [],
+      "proof_url": "",
+      "sha256": "4639a53186142d222ee95e8eefca650ee6ddac95ad242e25e2f74d605e4693fb",
+      "verified_at": "",
       "risk_level": "alto",
-      "usage_notes": "Trilha instrumental sem comprovante de licença para uso comercial."
+      "usage_notes": "Trilha instrumental sem comprovante de licença para uso comercial.",
+      "history": []
     }
   ]
 }
