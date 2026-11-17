@@ -1,10 +1,13 @@
 # GTA 6 Shorts Studio — Fábrica de YouTube Shorts (1080×1920)
 
-Estúdio automatizado focado em **GTA 6 e Rockstar Games** para canais de **YouTube Shorts**, projetado para produzir de **5 a 10 vídeos virais por dia**, com preview em tempo real e operação **sem API paga por padrão**.
+Estúdio local-first focado em **GTA 6 e Rockstar Games** para canais de **YouTube Shorts** (5 etapas no painel Web), com preview em tempo real e operação **sem chaves de API obrigatórias (serviços externos opcionais: Edge-TTS, Pollinations, Gemini)**.
 
-> 📖 **Documentação Arquitetural Completa:** [DOCUMENTACAO_COMPLETA_GTA6_SHORTS.md](DOCUMENTACAO_COMPLETA_GTA6_SHORTS.md)  
-> 🔍 **Relatório de Auditoria Técnica (Histórico):** [AUDITORIA.md](AUDITORIA.md)  
+> 📖 **Arquitetura Atual:** [ARCHITECTURE.md](ARCHITECTURE.md)  
+> 🗺️ **Roadmap e Pendências:** [ROADMAP.md](ROADMAP.md)  
+> 📝 **Histórico de Mudanças:** [CHANGELOG.md](CHANGELOG.md)  
 > 🛡️ **Catálogo de Procedência e Licenças:** [inputs/media_catalog.json](inputs/media_catalog.json)
+
+> ⚠️ **Aviso de Direitos Autorais:** O catálogo registra decisões e origem das mídias; **não confere autorização**. Fair use varia por país e não impede Content ID, reivindicações ou strikes. Para canais monetizados, consulte um profissional de direitos autorais.
 
 ---
 
@@ -32,8 +35,8 @@ Estúdio automatizado focado em **GTA 6 e Rockstar Games** para canais de **YouT
 ## 📋 Pré-requisitos e Instalação
 
 ### Requisitos:
-- **Python 3.10+** (recomendado 3.11 a 3.14, 64-bit)
-- **FFmpeg / FFprobe** instalado no sistema ou acessível via `imageio-ffmpeg`
+- **Python 3.11, 3.12 ou 3.14** (64-bit — versões validadas no CI em Windows e Linux)
+- **FFmpeg** instalado no sistema ou empacotado via `imageio-ffmpeg`
 
 ### 1. Clonar e Criar Ambiente Virtual
 
@@ -43,7 +46,9 @@ git clone https://github.com/ThiagoSantiago03/gta6-shorts-creator.git
 cd gta6-shorts-creator
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.txt -c requirements-lock.txt
+# Para rodar testes automatizados:
+pip install -r requirements-dev.txt
 ```
 
 **No Linux / macOS:**
@@ -52,7 +57,9 @@ git clone https://github.com/ThiagoSantiago03/gta6-shorts-creator.git
 cd gta6-shorts-creator
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -c requirements-lock.txt
+# Para rodar testes automatizados:
+pip install -r requirements-dev.txt
 ```
 
 ---
@@ -77,13 +84,13 @@ Acesse no navegador: **`http://127.0.0.1:8765`**
 # 1. Consultar tendências no radar de GTA 6
 python cli.py radar --query "GTA 6" --geo "BR"
 
-# 2. Criar roteiro e montagem a partir de um tópico
-python cli.py create --topic "Data de Lancamento de GTA 6" --archetype "auto"
+# 2. Criar roteiro e montagem a partir de um tópico (padrão seguro: --intent commercial)
+python cli.py create --topic "Data de Lancamento de GTA 6" --archetype "auto" --intent commercial
 
 # 3. Criar lote de 5 Shorts automaticamente a partir do radar
-python cli.py batch --count 5
+python cli.py batch --count 5 --intent commercial
 
-# 4. Renderizar um projeto existente
+# 4. Renderizar um projeto existente (opcional: sobrescrever --intent)
 python cli.py render --project-id <id_do_projeto>
 
 # 5. Listar todos os vídeos e status de renderização
