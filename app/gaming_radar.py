@@ -255,7 +255,8 @@ def _existing_covered_blobs() -> list[str]:
         try:
             raw = pf.read_text(encoding="utf-8").lower()
             blobs.append(raw[:1600])
-        except Exception:
+        except Exception as exc:
+            logger.debug("Ignorando project.json ilegível (%s): %s", pf, exc)
             continue
     return blobs
 
@@ -545,7 +546,8 @@ def fetch_publisher_gaming_rss(query: str = "GTA 6") -> list[TopicTrendItem]:
                                 suggested_angle=_suggest_angle(title),
                             )
                         )
-                except Exception:
+                except Exception as exc:
+                    logger.warning("Falha ao consultar RSS de publisher: %s", exc)
                     continue
     except Exception:
         return []
@@ -999,7 +1001,8 @@ def _find_direct_urls_via_bing(query: str, client: httpx.Client, limit: int = 3)
                         found.append((real_u, f"{title}. {desc}".strip()))
                 if len(found) >= limit:
                     return found
-        except Exception:
+        except Exception as exc:
+            logger.debug("Ignorando item inválido no fallback Bing News: %s", exc)
             continue
     return found
 
@@ -1120,7 +1123,8 @@ def fetch_gaming_topic_dossier(
                     if ex:
                         ex_pt = translate_to_pt_br(ex[:750], client=client) if "en.wikipedia.org" in base else ex[:750]
                         wiki_extracts.append(ex_pt)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Falha ao consultar resumo Wikipedia (%s): %s", base, exc)
                 continue
 
     lines = [

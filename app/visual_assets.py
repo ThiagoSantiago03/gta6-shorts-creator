@@ -60,7 +60,8 @@ def _load_font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont | ImageFo
         if Path(path).exists():
             try:
                 return ImageFont.truetype(path, size=size)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fonte indisponível (%s): %s", path, exc)
                 continue
     return ImageFont.load_default()
 
@@ -1809,7 +1810,8 @@ def fetch_artist_live_gallery(
                             _fit_stage_fullbleed_9_16(raw_p, out_png)
                             raw_p.unlink(missing_ok=True)
                             paths.append(out_png)
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("Falha ao baixar imagem da galeria (%s): %s", img_url, exc)
                         continue
 
                 # 2. Supplement up to max_images with music-constrained Commons stage/band queries
@@ -1876,7 +1878,8 @@ def fetch_artist_live_gallery(
                                 raw_p.unlink(missing_ok=True)
                                 paths.append(out_png)
                                 taken_from_q += 1
-                        except Exception:
+                        except Exception as exc:
+                            logger.debug("Falha ao baixar imagem do Commons (%s): %s", img_url, exc)
                             continue
         except Exception as exc:
             logger.debug("Falha na coleta de galeria ao vivo: %s", exc)

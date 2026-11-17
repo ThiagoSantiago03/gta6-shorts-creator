@@ -430,7 +430,8 @@ def search_bing_images(query: str, limit: int = 8) -> list[dict[str, str]]:
                 raw_m = _html.unescape(m.group(1))
                 try:
                     meta = json.loads(raw_m)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Ignorando metadado de imagem inválido no Bing: %s", exc)
                     continue
                 murl = str(meta.get("murl") or "").strip()
                 turl = str(meta.get("turl") or murl).strip()
@@ -1586,7 +1587,8 @@ def _music_history_claimed_stems() -> set[str]:
                 af = data.get("audio_file")
                 if af:
                     claimed.add(re.sub(r"[^a-z0-9]+", "", Path(str(af)).stem.lower()))
-        except Exception:
+        except Exception as exc:
+            logger.debug("Ignorando projeto ilegível em _music_history_claimed_stems: %s", exc)
             continue
     return claimed
 

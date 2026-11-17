@@ -42,7 +42,8 @@ def _load_mono_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         if Path(path).exists():
             try:
                 return ImageFont.truetype(path, size=size)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fonte mono indisponível (%s): %s", path, exc)
                 continue
     return ImageFont.load_default()
 

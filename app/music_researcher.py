@@ -161,7 +161,8 @@ def _search_wikipedia_article(
                     "extract": full_text[:max_chars],
                     "url": f"https://{lang}.wikipedia.org/?curid={pageid}",
                 }
-        except Exception:
+        except Exception as exc:
+            logger.debug("Falha em consulta Wikipedia (%s): %s", lang, exc)
             continue
     return {}
 

@@ -463,7 +463,8 @@ def list_projects() -> list[dict[str, Any]]:
         if pfile.exists():
             try:
                 items.append(MusicStoryProject.model_validate_json(pfile.read_text(encoding="utf-8")))
-            except Exception:
+            except Exception as exc:
+                logger.warning("Projeto corrompido ignorado em list_projects (%s): %s", pfile, exc)
                 continue
     items.sort(key=lambda x: x.updated_at, reverse=True)
     return [p.model_dump() for p in items]

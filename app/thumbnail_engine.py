@@ -1067,7 +1067,8 @@ def _load_pil_font(size: int, bold: bool = True) -> ImageFont.ImageFont | ImageF
         if Path(fp).exists():
             try:
                 return ImageFont.truetype(fp, size)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Fonte PIL indisponível (%s): %s", fp, exc)
                 continue
     return ImageFont.load_default()
 

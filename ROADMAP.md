@@ -18,6 +18,6 @@
 | **T9** | E — Build e docs | Lockfile único UTF-8 (`requirements-lock.txt`), `requirements-dev.txt` e CI com lock | Média | ✅ Concluída | `requirements.lock` removido; CI instala lock em 3.11/3.12/3.14 |
 | **T10** | E — Build e docs | Consolidação de `ARCHITECTURE.md`, `ROADMAP.md`, `CHANGELOG.md`, arquivamento de `AUDITORIA.md` | Média | ✅ Concluída | Sem contradições de versão, etapas ou "Zero-API" |
 | **T11** | E — Build e docs | Verificação e documentação de `.agents/legacy/skills/music-history-director` | Baixa | ✅ Concluída | Confirmado fora do fluxo principal e documentado como histórico (não apagado) |
-| **T12** | F — Qualidade | Auditoria de exceções silenciosas (`pass` e `continue`) com allowlist justificada | Média | 🔄 Próxima | Teste AST cobre `Pass` e `Continue` com allowlist explícita |
+| **T12** | F — Qualidade | Auditoria de exceções silenciosas (`pass` e `continue`) com allowlist justificada | Média | ✅ Concluída | Teste AST cobre `Pass` e `Continue` com allowlist explícita (`app/job_queue.py:_worker_loop`) |
 | **T13** | F — Qualidade | Caracterização de `render_gaming_youtube_short` e isolamento de legado em `app/legacy/` | Baixa | ⏳ Planejada | Fluxo GTA 6 sem imports de legado; PRs pequenos após aprovação |
 | **T14** | G — Produto | Aprovação humana obrigatória, limite diário, variação real de formato e analytics | Opcional | ⏸️ Aguardando decisão humana | Implementar apenas após confirmação do dono do projeto |
