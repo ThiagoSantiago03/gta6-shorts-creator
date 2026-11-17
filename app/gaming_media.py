@@ -3,11 +3,15 @@ from __future__ import annotations
 import hashlib
 import html as _html
 import json
+import logging
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("gta6_media")
 
 import httpx
 
@@ -92,8 +96,8 @@ def apply_overlay_image_url(url: str, out_png: Path) -> bool:
                     fit_overlay_editorial_png(raw_path, out_png)
                     raw_path.unlink(missing_ok=True)
                     return out_png.exists()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao baixar imagem editorial de %s: %s", clean_url, exc)
     raw_path.unlink(missing_ok=True)
     return False
 
@@ -154,8 +158,8 @@ def index_trailer_scenes(video_path: Path, max_clips: int = 12, force: bool = Fa
             cached = json.loads(cache_json.read_text(encoding="utf-8"))
             if cached and all(Path(c["thumb_path"]).exists() for c in cached):
                 return cached
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao ler cache de cenas de %s: %s", cache_json, exc)
 
     dur = max(2.0, get_audio_duration(video_path))
     ffmpeg = get_ffmpeg_exe()
@@ -448,8 +452,8 @@ def search_bing_images(query: str, limit: int = 8) -> list[dict[str, str]]:
                 )
                 if len(out) >= limit:
                     break
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao buscar imagens relacionadas: %s", exc)
     return out
 
 
@@ -542,8 +546,8 @@ def _pick_youtube_chapter_or_offset(
             if isinstance(info, dict):
                 dur = float(info.get("duration") or 0.0)
                 chapters = list(info.get("chapters") or [])
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao obter info de capítulos do vídeo %s: %s", video_url, exc)
 
     chosen = float(default_start)
     if chapters and scene_hint.strip():
@@ -586,8 +590,8 @@ def download_news_video_segment(
         try:
             if get_audio_duration(out_mp4) >= 2.0:
                 return out_mp4
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao verificar duração do vídeo existente %s: %s", out_mp4, exc)
 
     ffmpeg_exe = get_ffmpeg_exe()
     kind = str(video_spec.get("kind") or "youtube").lower()
@@ -617,16 +621,20 @@ def download_news_video_segment(
                         str(out_mp4),
                     ]
                     subprocess.run(cmd, capture_output=True, timeout=30)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao extrair clipe direto com ffmpeg: %s", exc)
         finally:
             tmp_raw.unlink(missing_ok=True)
         if out_mp4.exists() and out_mp4.stat().st_size > 30_000:
             return out_mp4
         return None
 
-    ytdlp_exe = Path(sys.executable).parent / "yt-dlp.exe"
-    cmd_base = [str(ytdlp_exe)] if ytdlp_exe.exists() else [sys.executable, "-m", "yt_dlp"]
+    ytdlp_found = shutil.which("yt-dlp")
+    if not ytdlp_found:
+        venv_candidate = Path(sys.executable).parent / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
+        if venv_candidate.exists():
+            ytdlp_found = str(venv_candidate)
+    cmd_base = [ytdlp_found] if ytdlp_found else [sys.executable, "-m", "yt_dlp"]
     out_tpl = str(out_mp4.with_suffix(".%(ext)s"))
     for p in out_mp4.parent.glob(f"{out_mp4.stem}.*"):
         if p != out_mp4:
@@ -648,8 +656,8 @@ def download_news_video_segment(
         subprocess.run(cmd, capture_output=True, text=True, timeout=42)
         if out_mp4.exists() and out_mp4.stat().st_size > 30_000 and get_audio_duration(out_mp4) >= 1.8:
             return out_mp4
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Falha ao executar download com yt-dlp: %s", exc)
     return None
 
 
@@ -1279,8 +1287,8 @@ def auto_blend_gaming_clips_and_images(
 
     try:
         record_project_used_media(project)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Falha ao auditar mídias utilizadas no projeto %s: %s", project.id, exc)
 
     return {
         "assigned_clips": assigned_clips,
@@ -1488,8 +1496,8 @@ def load_media_catalog() -> dict[str, Any]:
     if catalog_path.exists():
         try:
             return json.loads(catalog_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao analisar media_catalog.json: %s", exc)
     return {"version": "1.0", "items": []}
 
 

@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import html
+import logging
 import re
 import urllib.parse
-import xml.etree.ElementTree as ET
+try:
+    import defusedxml.ElementTree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger("gta6_radar")
 
 from app.config import PROJECTS_DIR
 from app.models import TopicTrendItem
@@ -153,11 +159,32 @@ def translate_to_en(text: str, client: httpx.Client | None = None) -> str:
     _EN_TRANSLATION_CACHE[clean] = out
     return out
 
-_OFFICIAL_SOURCES = (
-    "rockstar", "take-two", "take two", "playstation blog", "xbox wire", "ign",
-    "vgc", "eurogamer", "gamespot", "kotaku", "polygon", "bloomberg",
-    "meuplaystation", "flow games", "voxel", "tecmundo", "canaltech", "uol",
+_OFFICIAL_DIRECT_SOURCES = (
+    "rockstar games", "rockstar newswire", "take-two", "take two interactive",
 )
+
+_OFFICIAL_TITLE_KEYWORDS = (
+    "trailer oficial", "comunicado oficial", "anúncio oficial", "anuncio oficial",
+    "rockstar confirma", "take-two confirma", "confirmado pela rockstar",
+    "confirmado oficialmente",
+)
+
+_UNCERTAINTY_KEYWORDS = (
+    "rumor", "rumores", "vazamento", "vazamentos", "vazou", "vaza",
+    "suposto", "suposta", "supostos", "supostas", "supostamente",
+    "teria", "teriam", "pode indicar", "pode ter", "leak", "leaks", "leaked",
+    "especulação", "especulacao", "não confirmado", "nao confirmado",
+    "possível", "possivel", "diz insider", "insider", "teoria", "teorias",
+)
+
+_PRESS_SOURCES = (
+    "ign", "gamespot", "bloomberg", "vgc", "eurogamer", "kotaku", "polygon",
+    "the verge", "playstation blog", "xbox wire", "meuplaystation", "flow games",
+    "voxel", "tecmundo", "canaltech", "jovem nerd", "uol", "digital foundry",
+    "pc gamer", "game informer",
+)
+
+_OFFICIAL_SOURCES = _OFFICIAL_DIRECT_SOURCES + _PRESS_SOURCES
 
 _GAMING_KEYWORDS = (
     "gta", "grand theft auto", "rockstar", "vice city", "leonida",
@@ -242,11 +269,23 @@ def _is_already_covered(title: str, covered_blobs: list[str]) -> bool:
 
 
 def _classify_confidence(title: str, source: str) -> str:
-    low = f"{title} {source}".lower()
-    if any(k in low for k in ("rockstar", "take-two", "take two", "trailer oficial", "confirmado", "oficial")):
+    title_low = (title or "").lower()
+    source_low = (source or "").lower()
+
+    # 1. Qualquer indício de dúvida, rumor ou vazamento rebaixa imediatamente para Rumor
+    if any(k in title_low for k in _UNCERTAINTY_KEYWORDS):
+        return "Rumor / Não verificado"
+
+    # 2. Oficial / Confirmado estrito (canais diretos ou confirmação expressa sem dúvida)
+    if any(src in source_low for src in _OFFICIAL_DIRECT_SOURCES):
         return "Oficial / Confirmado"
-    if any(src in low for src in _OFFICIAL_SOURCES):
+    if any(k in title_low for k in _OFFICIAL_TITLE_KEYWORDS):
+        return "Oficial / Confirmado"
+
+    # 3. Imprensa especializada e cobertura jornalística
+    if any(src in source_low for src in _PRESS_SOURCES):
         return "Notícia / Imprensa"
+
     return "Análise / Tendência"
 
 
@@ -542,8 +581,8 @@ def fetch_daily_gaming_radar(query: str = "GTA 6", geo: str = "BR") -> list[Topi
                 if it.summary and looks_english_text(it.summary):
                     it.summary = translate_to_pt_br(it.summary, client=t_client)
                 it.already_covered = it.already_covered or _is_already_covered(it.title, covered)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Falha na etapa de tradução/análise de pautas: %s", exc)
 
     return top_items
 
@@ -834,8 +873,8 @@ def _extract_article_page(client: httpx.Client, url: str) -> dict[str, Any]:
         out["images"] = imgs[:10]
         out["images_meta"] = images_meta[:10]
         out["videos"] = videos[:8]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na extração de artigo: %s", exc)
     return out
 
 
@@ -976,8 +1015,8 @@ def fetch_article_context_and_images(url: str, title_hint: str = "") -> dict[str
             out["images"] = imgs_all[:10]
             out["images_meta"] = imgs_meta_all[:10]
             out["videos"] = videos_all[:8]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Falha ao coletar contexto e imagens do artigo: %s", exc)
     return out
 
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import math
 import random
 import shutil
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger("gta6_renderer")
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -54,16 +57,22 @@ def _hex_to_rgb(hex_color: str, default: tuple[int, int, int] = (255, 59, 48)) -
     if len(cleaned) == 6:
         try:
             return (int(cleaned[0:2], 16), int(cleaned[2:4], 16), int(cleaned[4:6], 16))
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("Cor hex inválida '%s', usando padrão: %s", hex_color, exc)
     return default
 
 
 def _load_font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
+        # Windows
         r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\segoeuib.ttf" if bold else r"C:\Windows\Fonts\segoeui.ttf",
         r"C:\Windows\Fonts\impact.ttf" if bold else r"C:\Windows\Fonts\arial.ttf",
+        # Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        # macOS
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
     ]
     for path in candidates:
         if Path(path).exists():
@@ -762,27 +771,27 @@ def _render_scene_clip(
     ffmpeg = get_ffmpeg_exe()
     n_frames = max(15, int(math.ceil(duration_sec * FPS)))
     if effect == "zoom_out":
-        zp = f"scale=1620:2880,zoompan=z='max(1.0,1.14-0.14*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=99999:s={W}x{H}:fps={FPS}"
+        zp = f"scale=1620:2880,zoompan=z='max(1.0,1.14-0.14*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n_frames}:s={W}x{H}:fps={FPS}"
     elif effect == "pan_left":
-        zp = f"scale=1620:2880,zoompan=z='1.12':x='(iw-iw/zoom)*(1-on/{n_frames})':y='ih/2-(ih/zoom/2)':d=99999:s={W}x{H}:fps={FPS}"
+        zp = f"scale=1620:2880,zoompan=z='1.12':x='(iw-iw/zoom)*(1-on/{n_frames})':y='ih/2-(ih/zoom/2)':d={n_frames}:s={W}x{H}:fps={FPS}"
     elif effect == "pan_right":
-        zp = f"scale=1620:2880,zoompan=z='1.12':x='(iw-iw/zoom)*(on/{n_frames})':y='ih/2-(ih/zoom/2)':d=99999:s={W}x{H}:fps={FPS}"
+        zp = f"scale=1620:2880,zoompan=z='1.12':x='(iw-iw/zoom)*(on/{n_frames})':y='ih/2-(ih/zoom/2)':d={n_frames}:s={W}x{H}:fps={FPS}"
     elif effect == "ken_burns_duotone":
         r, g, b = _hex_to_rgb(accent_color)
         rm = max(0.35, r / 255.0)
         gm = max(0.30, g / 255.0)
         bm = max(0.35, b / 255.0)
         zp = (
-            f"scale=1620:2880,zoompan=z='min(1.13,1.0+0.13*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=99999:s={W}x{H}:fps={FPS},"
+            f"scale=1620:2880,zoompan=z='min(1.13,1.0+0.13*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n_frames}:s={W}x{H}:fps={FPS},"
             f"hue=s=0.35,colorchannelmixer=rr={rm:.2f}:gg={gm:.2f}:bb={bm:.2f},eq=contrast=1.12"
         )
     elif effect == "vintage_grain":
         zp = (
-            f"scale=1620:2880,zoompan=z='max(1.0,1.12-0.12*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=99999:s={W}x{H}:fps={FPS},"
+            f"scale=1620:2880,zoompan=z='max(1.0,1.12-0.12*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n_frames}:s={W}x{H}:fps={FPS},"
             "eq=contrast=1.08:saturation=0.78,noise=alls=9:allf=t"
         )
     else:
-        zp = f"scale=1620:2880,zoompan=z='min(1.14,1.0+0.14*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=99999:s={W}x{H}:fps={FPS}"
+        zp = f"scale=1620:2880,zoompan=z='min(1.14,1.0+0.14*(on/{n_frames}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n_frames}:s={W}x{H}:fps={FPS}"
 
     cmd = [
         ffmpeg,

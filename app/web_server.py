@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -12,6 +13,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("gta6_studio")
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
@@ -109,16 +112,16 @@ def _load_project(project_id: str) -> MusicStoryProject:
             content = pfile.read_text(encoding="utf-8")
             if content.strip():
                 return MusicStoryProject.model_validate_json(content)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao ler %s, tentando backup: %s", pfile, exc)
 
     if bak_file.exists():
         try:
             content = bak_file.read_text(encoding="utf-8")
             if content.strip():
                 return MusicStoryProject.model_validate_json(content)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao ler backup %s: %s", bak_file, exc)
 
     raise HTTPException(status_code=500, detail="Arquivo de projeto corrompido e sem backup válido.")
 
@@ -139,8 +142,8 @@ def _save_project(project: MusicStoryProject) -> MusicStoryProject:
     if target_file.exists() and target_file.stat().st_size > 0:
         try:
             shutil.copy2(target_file, bak_file)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao criar backup %s: %s", bak_file, exc)
 
     tmp_file.replace(target_file)
     return project
@@ -217,8 +220,8 @@ def _clear_scene_html_override(pdir: Path, target: SceneItem) -> None:
             hp = Path(target.html_path).resolve()
             if pdir.resolve() in hp.parents and hp.name == "hook_scene.html":
                 hp.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao remover html_path de cena: %s", exc)
     if target.index == 1:
         (pdir / "hook_scene.html").unlink(missing_ok=True)
     target.html_path = None
@@ -418,79 +421,90 @@ def create_batch_daily(req: BatchDailyRequest) -> dict[str, Any]:
 
     selected = items[: max(1, min(req.count, 10))]
     created_projects = []
+    failures = []
 
     for item in selected:
-        topic_title = item.title.strip()
-        pid = f"gta6-{_slugify(topic_title)}-{uuid.uuid4().hex[:6]}"
-        g_data = generate_gaming_script(
-            topic_title=topic_title,
-            game_name="GTA 6",
-            topic_angle=item.suggested_angle or "",
-            source_url=item.url or "",
-            fact_confidence=item.confidence or "Notícia / Imprensa",
-            reference_notes="",
-            script_engine="free_research",
-            accent_color="#00F0FF",
-            viral_archetype="auto",
-            speech_rate="+14%",
-        )
-        resolved_topic = str(g_data.get("resolved_topic") or topic_title)
-        scenes_objs = [
-            s if isinstance(s, SceneItem) else SceneItem(**s)
-            for s in g_data["scenes"]
-        ]
-        project = MusicStoryProject(
-            id=pid,
-            niche="gaming_news",
-            title=resolved_topic,
-            game="GTA 6",
-            song_title=resolved_topic,
-            artist="GTA 6",
-            year=g_data.get("resolved_year", "2026"),
-            genre="Games / GTA 6",
-            topic_angle=str(g_data.get("resolved_angle") or item.suggested_angle or ""),
-            topic_source_url=item.url or "",
-            fact_confidence=item.confidence or "Notícia / Imprensa",
-            max_duration_sec=58.0,
-            speech_rate="+14%",
-            viral_archetype=str(g_data.get("viral_archetype") or "auto"),
-            youtube_title=g_data["youtube_title"],
-            youtube_description=g_data["youtube_description"],
-            youtube_tags=g_data["youtube_tags"],
-            tiktok_caption=g_data["tiktok_caption"],
-            hook_title=g_data["hook_title"],
-            narration_full=g_data["narration_full"],
-            scenes=scenes_objs,
-            instagram_caption=g_data["instagram_caption"],
-            hashtags=g_data["hashtags"],
-            accent_color="#00F0FF",
-            video_mode="single_all_in_one",
-            opening_mode="lyric_hook",
-            overlay_style="clean_reels",
-            intro_music_sec=0.0,
-            music_break_sec=0.0,
-            finale_music_sec=0.25,
-            style_preset="vice_city_neon",
-            subtitle_style="vice_city",
-            tts_engine="edge_tts",
-            voice_name="pt-BR-AntonioNeural",
-            status="draft (automacao_diaria)",
-        )
-        auto_track, auto_start = auto_select_gaming_soundtrack(project)
-        if auto_track is not None and auto_track.exists():
-            project.audio_file = str(auto_track)
-            project.audio_clip_start = auto_start
         try:
-            auto_blend_gaming_clips_and_images(project, _project_dir(project.id), force_reassign=False)
-        except Exception:
-            pass
-        _save_project(project)
-        created_projects.append(project.model_dump())
+            topic_title = item.title.strip()
+            pid = f"gta6-{_slugify(topic_title)}-{uuid.uuid4().hex[:6]}"
+            g_data = generate_gaming_script(
+                topic_title=topic_title,
+                game_name="GTA 6",
+                topic_angle=item.suggested_angle or "",
+                source_url=item.url or "",
+                fact_confidence=item.confidence or "Notícia / Imprensa",
+                reference_notes="",
+                script_engine="free_research",
+                accent_color="#00F0FF",
+                viral_archetype="auto",
+                speech_rate="+14%",
+            )
+            resolved_topic = str(g_data.get("resolved_topic") or topic_title)
+            scenes_objs = [
+                s if isinstance(s, SceneItem) else SceneItem(**s)
+                for s in g_data["scenes"]
+            ]
+            project = MusicStoryProject(
+                id=pid,
+                niche="gaming_news",
+                title=resolved_topic,
+                game="GTA 6",
+                song_title=resolved_topic,
+                artist="GTA 6",
+                year=g_data.get("resolved_year", "2026"),
+                genre="Games / GTA 6",
+                topic_angle=str(g_data.get("resolved_angle") or item.suggested_angle or ""),
+                topic_source_url=item.url or "",
+                fact_confidence=item.confidence or "Notícia / Imprensa",
+                max_duration_sec=58.0,
+                speech_rate="+14%",
+                viral_archetype=str(g_data.get("viral_archetype") or "auto"),
+                youtube_title=g_data["youtube_title"],
+                youtube_description=g_data["youtube_description"],
+                youtube_tags=g_data["youtube_tags"],
+                tiktok_caption=g_data["tiktok_caption"],
+                hook_title=g_data["hook_title"],
+                narration_full=g_data["narration_full"],
+                scenes=scenes_objs,
+                instagram_caption=g_data["instagram_caption"],
+                hashtags=g_data["hashtags"],
+                accent_color="#00F0FF",
+                video_mode="single_all_in_one",
+                opening_mode="lyric_hook",
+                overlay_style="clean_reels",
+                intro_music_sec=0.0,
+                music_break_sec=0.0,
+                finale_music_sec=0.25,
+                style_preset="vice_city_neon",
+                subtitle_style="vice_city",
+                tts_engine="edge_tts",
+                voice_name="pt-BR-AntonioNeural",
+                status="draft (automacao_diaria)",
+            )
+            auto_track, auto_start = auto_select_gaming_soundtrack(project)
+            if auto_track is not None and auto_track.exists():
+                project.audio_file = str(auto_track)
+                project.audio_clip_start = auto_start
+            try:
+                auto_blend_gaming_clips_and_images(project, _project_dir(project.id), force_reassign=False)
+            except Exception as exc_blend:
+                logger.warning("Falha ao auto-mesclar mídias para projeto '%s': %s", project.id, exc_blend)
+            _save_project(project)
+            created_projects.append(project.model_dump())
+        except Exception as exc:
+            item_title = getattr(item, "title", "desconhecido")
+            logger.exception("Falha ao gerar projeto do lote diário para '%s': %s", item_title, exc)
+            failures.append({
+                "title": item_title,
+                "error": str(exc),
+            })
 
     return {
         "ok": True,
         "count": len(created_projects),
+        "failures_count": len(failures),
         "projects": created_projects,
+        "failures": failures,
     }
 
 
@@ -584,8 +598,8 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
         # Auto-distribute trailer/library clips & news overlay images across scenes immediately
         try:
             auto_blend_gaming_clips_and_images(project, _project_dir(project.id), force_reassign=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao auto-mesclar mídias para projeto %s: %s", project.id, exc)
         _save_project(project)
         return project.model_dump()
 
@@ -872,8 +886,8 @@ async def upload_audio(project_id: str, file: UploadFile = File(...)) -> dict[st
         try:
             wf = compute_waveform_peaks(dest, num_bars=120, highlight_window_sec=project.finale_music_sec or 12.0)
             project.finale_audio_start_sec = wf.get("suggested_finale_start")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao computar picos de forma de onda para áudio %s: %s", dest, exc)
     synced_cues = 0
     if project.niche != "gaming_news" and total_dur > 20.0:
         try:
@@ -924,8 +938,8 @@ def attach_input_audio(project_id: str, body: AttachInputAudioBody) -> dict[str,
         try:
             wf = compute_waveform_peaks(candidate, num_bars=120, highlight_window_sec=project.finale_music_sec or 12.0)
             project.finale_audio_start_sec = wf.get("suggested_finale_start")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao computar picos de forma de onda para áudio %s: %s", candidate, exc)
     synced_cues = 0
     if project.niche != "gaming_news" and total_dur > 20.0:
         try:
@@ -1037,8 +1051,8 @@ def get_project_audio_waveform(project_id: str) -> dict[str, Any]:
             cached = json.loads(cache_file.read_text(encoding="utf-8"))
             if cached.get("source") == str(audio_p) and cached.get("mtime_ns") == mtime_ns and cached.get("peaks"):
                 return {"has_audio": True, **cached}
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao ler cache de waveform: %s", exc)
     wf = compute_waveform_peaks(audio_p, num_bars=240, highlight_window_sec=project.finale_music_sec or 12.0)
     payload = {"source": str(audio_p), "mtime_ns": mtime_ns, **wf}
     cache_file.write_text(json.dumps(payload), encoding="utf-8")
@@ -1118,8 +1132,8 @@ async def upload_band_clip(project_id: str, file: UploadFile = File(...)) -> dic
     project.band_video_clips = [*project.band_video_clips, str(dest)]
     try:
         _redistribute_clips_for_gaming_project(project, pdir)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Falha ao redistribuir clipes após upload: %s", exc)
     _save_project(project)
     return {
         "clip_path": str(dest),
@@ -1149,8 +1163,8 @@ def attach_input_video(project_id: str, body: AttachInputVideoBody) -> dict[str,
         project.band_video_clips = [*project.band_video_clips, c_str]
     try:
         _redistribute_clips_for_gaming_project(project, pdir)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Falha ao redistribuir clipes após upload: %s", exc)
     _save_project(project)
     return {"clip_path": c_str, "band_video_clips": project.band_video_clips, "project": project.model_dump()}
 
@@ -1563,8 +1577,8 @@ def generate_visuals_endpoint(project_id: str) -> dict[str, Any]:
                 if items:
                     sc.candidate_items = items
                     sc.candidate_urls = [str(c.get("url") or "") for c in items[:6] if c.get("url")]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Falha ao buscar candidatos visuais para cena: %s", exc)
     generate_reel2_centerpiece(project, pdir, get_gemini_api_key())
     _save_project(project)
     return project.model_dump()
@@ -1601,8 +1615,8 @@ def regenerate_thumbnail_endpoint(project_id: str, body: RegenerateThumbnailBody
     if not has_any_visual:
         try:
             prepare_project_visuals(project, pdir)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao preparar visuais preliminares para thumbnail: %s", exc)
 
     cover_path = odir / "capa_destaque.png"
     generate_project_thumbnail(project=project, work_dir=pdir, out_cover_path=cover_path)

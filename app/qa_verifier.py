@@ -18,10 +18,21 @@ from app.models import MusicStoryProject, WordTiming
 
 def _load_mono_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
+        # Windows
         r"C:\Windows\Fonts\consolab.ttf",
         r"C:\Windows\Fonts\consola.ttf",
         r"C:\Windows\Fonts\arialbd.ttf",
         r"C:\Windows\Fonts\arial.ttf",
+        # Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+        # macOS
+        "/System/Library/Fonts/SFNSMono.ttf",
+        "/System/Library/Fonts/Monaco.dfont",
+        "/System/Library/Fonts/Supplemental/Courier New.ttf",
     ]
     for path in candidates:
         if Path(path).exists():
@@ -236,15 +247,19 @@ def probe_video_and_loudness(video_path: Path, expect_audio: bool = True) -> dic
         issues.append(f"Unexpected resolution {width}x{height} (expected 1080x1920)")
     if dur < 3.0:
         issues.append(f"Too short ({dur:.2f}s)")
+    if dur > 58.05:
+        issues.append(f"Exceeds max Shorts duration 58.0s ({dur:.2f}s)")
     if not has_h264 or not has_yuv420p:
         issues.append("Codec/pix_fmt not h264+yuv420p")
     if expect_audio and not has_audio:
         issues.append("Expected audio stream missing")
     if expect_audio and integrated_lufs is not None:
-        if integrated_lufs < -28.0:
-            issues.append(f"Audio too quiet ({integrated_lufs:.1f} LUFS)")
-        if true_peak_db is not None and true_peak_db > 0.2:
-            issues.append(f"Possible clipping (Peak {true_peak_db:.1f} dBFS)")
+        if integrated_lufs < -24.0:
+            issues.append(f"Audio too quiet ({integrated_lufs:.1f} LUFS, target -14 LUFS)")
+        elif integrated_lufs > -10.0:
+            issues.append(f"Audio too loud ({integrated_lufs:.1f} LUFS, target -14 LUFS)")
+        if true_peak_db is not None and true_peak_db > -1.0:
+            issues.append(f"True peak exceeds -1.0 dBTP limit (Peak {true_peak_db:.1f} dBTP)")
 
     return {
         "file": video_path.name,

@@ -5,6 +5,7 @@ import base64
 import functools
 import http.server
 import json
+import logging
 import os
 import shutil
 import socket
@@ -13,6 +14,8 @@ import tempfile
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("gta6_motion")
 
 import httpx
 from PIL import Image
@@ -77,8 +80,8 @@ def _hex_to_rgb(hex_color: str, default: tuple[int, int, int] = (255, 46, 147)) 
     if len(cleaned) == 6:
         try:
             return int(cleaned[0:2], 16), int(cleaned[2:4], 16), int(cleaned[4:6], 16)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("Cor hex inválida '%s', usando default: %s", hex_color, exc)
     return default
 
 
@@ -1112,16 +1115,16 @@ async def _cdp_capture_transparent_mov(
         if ff_proc and ff_proc.poll() is None:
             try:
                 ff_proc.kill()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao matar processo FFmpeg: %s", exc)
         try:
             browser_proc.terminate()
             browser_proc.wait(timeout=3)
         except Exception:
             try:
                 browser_proc.kill()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao matar processo browser headless: %s", exc)
         shutil.rmtree(prof_dir, ignore_errors=True)
 
 

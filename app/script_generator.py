@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger("gta6_script_generator")
 
 from app.config import get_gemini_api_key, get_text_model
 from app.models import SceneItem
@@ -273,8 +276,8 @@ REGRAS OBRIGATÓRIAS:
                 "research_summary": (free_dossier.get("summary_text") or dossier)[:1400],
                 "engine_used": "gemini_with_research",
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha na geração de roteiro via Gemini, usando síntese local: %s", exc)
 
     # Zero-API Path: grounded Wikipedia PT/EN + MusicBrainz + iTunes + LRCLIB synthesis
     if free_dossier:

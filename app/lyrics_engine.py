@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import re
 import urllib.parse
 from pathlib import Path
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger("gta6_lyrics")
 
 
 HEADERS = {
@@ -98,8 +101,8 @@ def translate_lines_pt_br(lines: list[str]) -> list[str]:
                 split_pt = [s.strip() for s in full_pt.splitlines() if s.strip()]
                 if len(split_pt) == len(results):
                     return split_pt
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na tradução em lote de letras: %s", exc)
 
     # Fallback: per-line MyMemory
     translated: list[str] = []

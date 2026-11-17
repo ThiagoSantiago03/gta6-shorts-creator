@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 import shutil
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger("gta6_config")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = BASE_DIR / ".env"
@@ -52,8 +55,14 @@ def save_gemini_api_key(api_key: str) -> None:
 
 
 def get_text_model() -> str:
-    val = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash").strip()
-    if val in ("gemini-3.8-flash", "gemini-3.0-flash", "gemini-3.5-flash", ""):
+    val = os.getenv("GEMINI_TEXT_MODEL", "").strip()
+    if not val:
+        return "gemini-2.5-flash"
+    if val in ("gemini-3.8-flash", "gemini-3.0-flash", "gemini-3.5-flash"):
+        logger.warning(
+            "GEMINI_TEXT_MODEL configurado como '%s' (modelo não suportado/fictício). Fazendo fallback para 'gemini-2.5-flash'. Corrija seu .env.",
+            val
+        )
         return "gemini-2.5-flash"
     return val
 

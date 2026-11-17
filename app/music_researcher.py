@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger("gta6_music_researcher")
 
 from app.lyrics_engine import (
     fetch_synced_lyrics,
@@ -214,8 +217,8 @@ def _query_musicbrainz(client: httpx.Client, song_title: str, artist: str) -> di
             "releases": releases[:4],
             "tags": tags[:6],
         }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na busca de metadados no MusicBrainz: %s", exc)
     return out
 
 
@@ -243,8 +246,8 @@ def _query_itunes_meta(client: httpx.Client, song_title: str, artist: str) -> di
                     "artwork_url": str(item.get("artworkUrl100", "")).replace("100x100bb", "800x800bb"),
                 }
                 break
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na busca de metadados no iTunes: %s", exc)
     return out
 
 

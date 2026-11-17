@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+
+logger = logging.getLogger("gta6_shorts_analyzer")
 
 from app.config import get_gemini_api_key, get_text_model
 from app.models import ShortReferenceAnalysis
@@ -55,8 +58,8 @@ def fetch_youtube_oembed(watch_url: str) -> dict[str, str]:
                     "title": str(data.get("title", "")),
                     "channel": str(data.get("author_name", "")),
                 }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na chamada oEmbed do YouTube para %s: %s", watch_url, exc)
     return {"title": "", "channel": ""}
 
 

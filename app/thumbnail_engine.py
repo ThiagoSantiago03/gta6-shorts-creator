@@ -5,6 +5,7 @@ import base64
 import html
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -13,6 +14,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("gta6_thumbnail")
 
 import httpx
 import numpy as np
@@ -482,8 +485,8 @@ def _render_html_thumbnail_sync(html_doc: str, out_png: Path, browser_exe: str) 
             except Exception:
                 try:
                     proc.kill()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Falha ao forçar encerramento do processo de browser: %s", exc)
             shutil.rmtree(prof_dir, ignore_errors=True)
 
     asyncio.run(_run())
@@ -1029,16 +1032,35 @@ def _build_thumbnail_html(
 def _load_pil_font(size: int, bold: bool = True) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
     candidates = (
         [
+            # Windows
             "C:/Windows/Fonts/impact.ttf",
             "C:/Windows/Fonts/bahnschrift.ttf",
             "C:/Windows/Fonts/segoeuib.ttf",
             "C:/Windows/Fonts/arialbd.ttf",
+            # Linux (Debian, Ubuntu, Fedora, Arch)
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+            # macOS
+            "/System/Library/Fonts/Supplemental/Impact.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            "/Library/Fonts/Arial Bold.ttf",
         ]
         if bold
         else [
+            # Windows
             "C:/Windows/Fonts/bahnschrift.ttf",
             "C:/Windows/Fonts/segoeui.ttf",
             "C:/Windows/Fonts/arial.ttf",
+            # Linux
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            # macOS
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/Library/Fonts/Arial.ttf",
         ]
     )
     for fp in candidates:
@@ -1198,8 +1220,8 @@ def generate_project_thumbnail(
             _render_html_thumbnail_sync(html_doc, out_cover_path, browser_exe)
             if out_cover_path.exists() and out_cover_path.stat().st_size > 15_000:
                 return out_cover_path
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao renderizar thumbnail via browser headless, usando fallback PIL: %s", exc)
 
     _render_pil_thumbnail_fallback(copy_info, hero1, hero2, out_cover_path)
     return out_cover_path

@@ -5,6 +5,7 @@ import base64
 import functools
 import http.server
 import json
+import logging
 import os
 import shutil
 import socket
@@ -14,6 +15,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("gta6_html")
 
 import httpx
 import numpy as np
@@ -206,8 +209,8 @@ async def _cdp_render_frames(
 
             try:
                 await call("Browser.close")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao fechar conexão com browser via CDP: %s", exc)
 
         ff_proc.stdin.close()
         stderr_txt = ff_proc.stderr.read().decode("utf-8", errors="replace") if ff_proc.stderr else ""
@@ -229,8 +232,8 @@ async def _cdp_render_frames(
         except Exception:
             try:
                 browser_proc.kill()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao matar processo de browser headless: %s", exc)
         shutil.rmtree(prof_dir, ignore_errors=True)
 
 

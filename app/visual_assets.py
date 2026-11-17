@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import math
 import random
 import re
@@ -17,6 +18,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from app.config import get_ffmpeg_exe, get_gemini_api_key, get_image_model, get_text_model
 from app.models import MusicStoryProject, SceneItem
 
+logger = logging.getLogger("gta6_visual_assets")
 
 W, H = 1080, 1920
 
@@ -37,16 +39,22 @@ def _hex_to_rgb(hex_color: str, default: tuple[int, int, int] = (255, 59, 48)) -
     if len(cleaned) == 6:
         try:
             return (int(cleaned[0:2], 16), int(cleaned[2:4], 16), int(cleaned[4:6], 16))
-        except ValueError:
-            pass
+        except ValueError as exc:
+            logger.debug("Cor hex inválida '%s', usando default: %s", hex_color, exc)
     return default
 
 
 def _load_font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
+        # Windows
         r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\impact.ttf" if bold else r"C:\Windows\Fonts\segoeui.ttf",
         r"C:\Windows\Fonts\segoeuib.ttf" if bold else r"C:\Windows\Fonts\segoeui.ttf",
+        # Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        # macOS
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
     ]
     for path in candidates:
         if Path(path).exists():
@@ -324,8 +332,8 @@ def _fetch_wikipedia_entity_media(
                                 ))
                 if len(scored) >= max_candidates:
                     break
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na busca de mídia na Wikipedia: %s", exc)
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [item for _, item in scored[:max_candidates]]
@@ -481,8 +489,8 @@ def _search_wikipedia_topic_media(
                                 "_px": str(fw * fh),
                             },
                         ))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na busca de mídia tópica na Wikipedia: %s", exc)
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [item for _, item in scored[:max_candidates]]
@@ -1095,8 +1103,8 @@ def extract_video_frame_thumb(
                 else:
                     tmp_raw.replace(out_png)
                 return out_png.exists()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha na renderização de frame de vídeo: %s", exc)
     tmp_raw.unlink(missing_ok=True)
     return False
 
@@ -1123,8 +1131,8 @@ def apply_scene_image_url(url: str, out_png: Path) -> bool:
                 fit_cover_9_16(raw_path, out_png)
                 raw_path.unlink(missing_ok=True)
                 return out_png.exists()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao baixar imagem de cena de %s: %s", clean_url, exc)
     raw_path.unlink(missing_ok=True)
     return False
 
@@ -1262,8 +1270,8 @@ def search_scene_visual_candidates(
                     if q_idx == 0:
                         sc += 350_000.0
                     _add_cand(sc, item)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na busca de candidatos visuais da cena: %s", exc)
 
     ranked = sorted(scored.values(), key=lambda x: x[0], reverse=True)
     return [item for _, item in ranked[:limit]]
@@ -1503,8 +1511,8 @@ def _call_gemini_text_fast(prompt: str, api_key: str, timeout_sec: float = 6.5) 
                     return str(item["text"]).strip()
             if data.get("output_text"):
                 return str(data["output_text"]).strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha na chamada Pollinations text: %s", exc)
     return ""
 
 
@@ -1870,8 +1878,8 @@ def fetch_artist_live_gallery(
                                 taken_from_q += 1
                         except Exception:
                             continue
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha na coleta de galeria ao vivo: %s", exc)
 
     # Backfill cleanly from existing scene artwork or procedural stage cards so we always have 3+ frames
     if len(paths) < 3:

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import shutil
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger("gta6_cli")
 
 from app.config import OUTPUTS_DIR, PROJECTS_DIR
 from app.gaming_media import auto_blend_gaming_clips_and_images, auto_select_gaming_soundtrack
@@ -23,8 +26,8 @@ def save_project_safe(project: MusicStoryProject, pdir: Path) -> Path:
     if target.exists() and target.stat().st_size > 0:
         try:
             shutil.copy2(target, bak)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao criar backup de project.json: %s", exc)
     tmp.replace(target)
     return target
 
@@ -146,82 +149,94 @@ def cmd_batch(args: argparse.Namespace) -> None:
         print("Nenhuma pauta encontrada no radar.")
         return
 
+    success_count = 0
+    failure_count = 0
+
     for idx, it in enumerate(items, 1):
         print(f"\n--- [{idx}/{count}] Criando: {it.title} ---")
-        pid = f"gta6-{_slugify(it.title)}-{uuid.uuid4().hex[:6]}"
-        pdir = PROJECTS_DIR / pid
-        pdir.mkdir(parents=True, exist_ok=True)
-
-        g_data = generate_gaming_script(
-            topic_title=it.title,
-            game_name="GTA 6",
-            topic_angle=it.suggested_angle,
-            source_url=it.url,
-            fact_confidence=it.confidence or "Notícia / Imprensa",
-            reference_notes="",
-            script_engine="free_research",
-            accent_color="#00F0FF",
-            viral_archetype="auto",
-            speech_rate="+14%",
-        )
-
-        scenes_objs = [
-            s if isinstance(s, SceneItem) else SceneItem(**s)
-            for s in g_data["scenes"]
-        ]
-
-        project = MusicStoryProject(
-            id=pid,
-            niche="gaming_news",
-            title=str(g_data.get("resolved_topic") or it.title),
-            game="GTA 6",
-            song_title=str(g_data.get("resolved_topic") or it.title),
-            artist="GTA 6",
-            year="2026",
-            genre="Games / GTA 6",
-            topic_angle=str(g_data.get("resolved_angle") or it.suggested_angle or ""),
-            topic_source_url=it.url,
-            max_duration_sec=58.0,
-            speech_rate="+14%",
-            viral_archetype="auto",
-            youtube_title=g_data["youtube_title"],
-            youtube_description=g_data["youtube_description"],
-            youtube_tags=g_data["youtube_tags"],
-            tiktok_caption=g_data["tiktok_caption"],
-            hook_title=g_data["hook_title"],
-            narration_full=g_data["narration_full"],
-            scenes=scenes_objs,
-            instagram_caption=g_data["instagram_caption"],
-            hashtags=g_data["hashtags"],
-            accent_color="#00F0FF",
-            video_mode="single_all_in_one",
-            style_preset="vice_city_neon",
-            subtitle_style="vice_city",
-            tts_engine="edge_tts",
-            voice_name="pt-BR-AntonioNeural",
-            status="draft (batch_cli)",
-        )
-
-        auto_track, auto_start = auto_select_gaming_soundtrack(project)
-        if auto_track is not None and auto_track.exists():
-            project.audio_file = str(auto_track)
-            project.audio_clip_start = auto_start
-
         try:
-            auto_blend_gaming_clips_and_images(project, pdir, force_reassign=False)
-        except Exception:
-            pass
+            pid = f"gta6-{_slugify(it.title)}-{uuid.uuid4().hex[:6]}"
+            pdir = PROJECTS_DIR / pid
+            pdir.mkdir(parents=True, exist_ok=True)
 
-        save_project_safe(project, pdir)
-        print(f"Short {idx} criado: ID {pid}")
+            g_data = generate_gaming_script(
+                topic_title=it.title,
+                game_name="GTA 6",
+                topic_angle=it.suggested_angle,
+                source_url=it.url,
+                fact_confidence=it.confidence or "Notícia / Imprensa",
+                reference_notes="",
+                script_engine="free_research",
+                accent_color="#00F0FF",
+                viral_archetype="auto",
+                speech_rate="+14%",
+            )
 
-        if args.render:
-            print(f"Renderizando Short {idx}...")
-            odir = OUTPUTS_DIR / pid
-            odir.mkdir(parents=True, exist_ok=True)
-            rendered = render_full_project(project, pdir, odir)
-            save_project_safe(rendered, pdir)
-            print(f"Renderizado: {odir / 'single_video.mp4'}")
+            scenes_objs = [
+                s if isinstance(s, SceneItem) else SceneItem(**s)
+                for s in g_data["scenes"]
+            ]
+
+            project = MusicStoryProject(
+                id=pid,
+                niche="gaming_news",
+                title=str(g_data.get("resolved_topic") or it.title),
+                game="GTA 6",
+                song_title=str(g_data.get("resolved_topic") or it.title),
+                artist="GTA 6",
+                year="2026",
+                genre="Games / GTA 6",
+                topic_angle=str(g_data.get("resolved_angle") or it.suggested_angle or ""),
+                topic_source_url=it.url,
+                max_duration_sec=58.0,
+                speech_rate="+14%",
+                viral_archetype="auto",
+                youtube_title=g_data["youtube_title"],
+                youtube_description=g_data["youtube_description"],
+                youtube_tags=g_data["youtube_tags"],
+                tiktok_caption=g_data["tiktok_caption"],
+                hook_title=g_data["hook_title"],
+                narration_full=g_data["narration_full"],
+                scenes=scenes_objs,
+                instagram_caption=g_data["instagram_caption"],
+                hashtags=g_data["hashtags"],
+                accent_color="#00F0FF",
+                video_mode="single_all_in_one",
+                style_preset="vice_city_neon",
+                subtitle_style="vice_city",
+                tts_engine="edge_tts",
+                voice_name="pt-BR-AntonioNeural",
+                status="draft (batch_cli)",
+            )
+
+            auto_track, auto_start = auto_select_gaming_soundtrack(project)
+            if auto_track is not None and auto_track.exists():
+                project.audio_file = str(auto_track)
+                project.audio_clip_start = auto_start
+
+            try:
+                auto_blend_gaming_clips_and_images(project, pdir, force_reassign=False)
+            except Exception as exc_blend:
+                logger.warning("Falha ao auto-mesclar mídias para projeto '%s': %s", project.id, exc_blend)
+
+            save_project_safe(project, pdir)
+            print(f"Short {idx} criado: ID {pid}")
+
+            if args.render:
+                print(f"Renderizando Short {idx}...")
+                odir = OUTPUTS_DIR / pid
+                odir.mkdir(parents=True, exist_ok=True)
+                rendered = render_full_project(project, pdir, odir)
+                save_project_safe(rendered, pdir)
+                print(f"Renderizado: {odir / 'single_video.mp4'}")
+
+            success_count += 1
+        except Exception as exc:
+            failure_count += 1
+            logger.exception("Falha ao processar item %s no batch CLI: %s", getattr(it, 'title', 'desconhecido'), exc)
+            print(f"[ERRO] Falha ao processar item {idx} ({getattr(it, 'title', 'desconhecido')}): {exc}")
+
+    print(f"\nLote finalizado: {success_count} sucesso(s), {failure_count} falha(s).")
 
 
 def cmd_render(args: argparse.Namespace) -> None:
@@ -250,8 +265,8 @@ def cmd_list(args: argparse.Namespace) -> None:
             try:
                 proj = MusicStoryProject.model_validate_json(pfile.read_text(encoding="utf-8"))
                 items.append(proj)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Falha ao carregar projeto de %s: %s", pfile, exc)
     items.sort(key=lambda x: x.updated_at, reverse=True)
     print(f"Projetos cadastrados ({len(items)}):")
     for it in items:
