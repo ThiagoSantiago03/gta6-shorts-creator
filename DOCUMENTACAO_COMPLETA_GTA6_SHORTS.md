@@ -364,9 +364,9 @@ A tabela abaixo acompanha o status das tarefas planejadas em conjunto com ChatGP
 | **Etapa 0** | Auditoria Profunda do Código | **Concluída** | Relatório [AUDITORIA.md](file:///d:/CriadorDeVideos/AUDITORIA.md) entregue com 7 eixos de diagnóstico sem alteração de código. |
 | **Tarefa 1.1** | Procedência e Licença das Mídias | **Concluída** | Criado `inputs/media_catalog.json`. Adicionada função `record_project_used_media()`. QA alerta mídias de alto risco ou sem licença. Integrado card visual no Passo 4 da UI. |
 | **Tarefa 4.1** | Persistência Segura & Backup `.bak` | **Concluída (Antecipada)** | Implementada escrita atômica com arquivo temporário (`.tmp -> replace`) e backup automático de versão anterior (`project.json.bak`) no backend e na CLI. |
-| **Tarefa 1.3** | Confiabilidade da Notícia (Rumor vs Fato) | *Próxima* | Adicionar `status_confiabilidade` (`confirmado`, `reportado`, `rumor`, `nao_verificado`), adaptar linguagem do roteirista e bloquear pautas não verificadas no lote. |
-| **Tarefa 2.2** | Duração Real do Áudio (<= 58.0s) | *Pendente* | Medir áudio sintetizado cena a cena com ffprobe e ajustar speech_rate sem cortar falas. |
-| **Tarefa 2.1** | Arquétipos Narrativos de Roteiro | *Pendente* | Implementar 4 arquétipos (Notícia, Curiosidade, Rumor/Teoria, Debate/Comparação) e variar CTAs. |
+| **Tarefa 1.3** | Confiabilidade da Notícia (Rumor vs Fato) | **Concluída** | Modelo de 4 classes (`confirmado`, `reportado`, `rumor`, `nao_verificado`), sanitização de afirmações categóricas em rumores, e filtro que pula pautas não verificadas em lotes diários. |
+| **Tarefa 2.1** | Arquétipos Narrativos de Roteiro | **Concluída** | 4 arquétipos canônicos (`noticia`, `curiosidade`, `teoria_rumor`, `polemica_comparacao`), estrutura dinâmica de 4 a 5 cenas, e CTAs variados por tema sem fórmula fixa A vs B. |
+| **Tarefa 2.2** | Duração Real do Áudio (<= 58.0s) | **Concluída** | Medição da duração real concatenada de cada cena com recálculo automático de velocidade TTS (+12% a +28%), orçamento sintático proporcional de palavras e gate rígido no QA reprovando Shorts > 58.0s. |
 | **Tarefa 1.2** | Uso Transformativo dos Trailers | *Pendente* | Limitar tempo contínuo de corte (máx 6s) e vincular contexto visual à fala. |
 | **Tarefa 3.3** | Mixagem de Áudio com Sidechain | *Pendente* | Trocar volume estático por `sidechaincompress` e normalização `loudnorm`. |
 | **Tarefa 3.1** | Enquadramentos Verticais (Blur-Fill) | *Pendente* | Modos `crop_center`, `crop_focus` e `blur_fill` configuráveis por cena. |

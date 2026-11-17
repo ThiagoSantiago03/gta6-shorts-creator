@@ -457,7 +457,7 @@ def run_project_qa(
     if yt_primary and yt_primary.is_file():
         p_yt = probe_video_and_loudness(yt_primary, expect_audio=True)
         max_cap = float(getattr(project, "max_duration_sec", 58.0) or 58.0)
-        if p_yt.get("duration_sec", 0.0) > max_cap + 0.5:
+        if p_yt.get("duration_sec", 0.0) > max_cap + 0.05:
             p_yt["issues"].append(
                 f"Ultrapassa o teto de Shorts ({p_yt['duration_sec']}s > {max_cap:.1f}s)"
             )

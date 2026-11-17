@@ -11,10 +11,15 @@ from app.models import SceneItem
 logger = logging.getLogger(__name__)
 
 VIRAL_ARCHETYPES = {
+    "noticia": "Notícia Oficial (Gancho → Fato → Contexto → Consequência → Pergunta)",
+    "curiosidade": "Descoberta & Curiosidade (Gancho → Evidência → Detalhe → Revelação → Fechamento)",
+    "teoria_rumor": "Teoria & Rumor (Pergunta → Evidências → Hipótese → Contraponto → Debate)",
+    "polemica_comparacao": "Polêmica & Comparação (Afirmação → Argumentos → Contraponto → Conclusão)",
+    # Aliases retrocompatíveis
     "contraste_detalhe": "Contraste ('Mas tem um detalhe que ninguém viu...')",
-    "lista_open_loop": "Lista ('3 motivos — e o último vai te chocar...')",
     "raio_x_numeros": "Raio-X de Dados ('R$ 400 / 212 GB / 60 FPS')",
     "gameplay_imersao": "Gameplay & Reação ('Funciona assim na prática...')",
+    "lista_open_loop": "Lista ('3 motivos — e o último vai te chocar...')",
 }
 
 
@@ -27,17 +32,47 @@ def _clean_short_topic(topic: str) -> str:
     return t or "GTA 6"
 
 
-def _pick_viral_archetype(topic: str, context: str = "", requested: str = "auto") -> str:
-    if requested and requested in VIRAL_ARCHETYPES:
+def _pick_viral_archetype(
+    topic: str,
+    context: str = "",
+    requested: str = "auto",
+    status_confiabilidade: str = "reportado",
+) -> str:
+    if requested and requested != "auto" and requested in VIRAL_ARCHETYPES:
         return requested
+
     blob = f"{topic} {context}".lower()
-    if re.search(r"\b(\d+[\.,]?\d*\s?(?:gb|tb|fps|horas|dias|anos|bilhões|milhões|r\$|us\$))\b", blob):
-        return "raio_x_numeros"
-    if any(k in blob for k in ("motivos", "razões", "coisas", "erros", "segredos", "novidades")):
-        return "lista_open_loop"
-    if any(k in blob for k in ("mas", "porém", "contudo", "segredo", "pegadinha", "cuidado", "polêmica", "adiado", "adiamento", "pc")):
-        return "contraste_detalhe"
-    return "gameplay_imersao"
+
+    # 1. Rumor / Vazamento -> sempre teoria_rumor (M-02 / Tarefa 2.1)
+    if (
+        status_confiabilidade == "rumor"
+        or any(k in blob for k in ("rumor", "rumores", "vaza", "vazou", "leak", "supost", "teoria", "insider"))
+    ):
+        return "teoria_rumor"
+
+    # 2. Polêmica / Comparação / Preço / Adiamento -> polemica_comparacao
+    if any(
+        k in blob
+        for k in (
+            "preço", "preco", "custo", "bilhões", "bilhoes", "orçamento", "caro",
+            "80 dólares", "adiado", "adiamento", "pc vs", "cancelad", "polêmica", "polemica",
+            "vs", "versus", "disco físico"
+        )
+    ):
+        return "polemica_comparacao"
+
+    # 3. Curiosidade / Descoberta / Detalhes / Físicas / NPCs
+    if any(
+        k in blob
+        for k in (
+            "segredo", "easter egg", "curiosidade", "escondid", "descob",
+            "física", "fisica", "água", "animais", "npcs", "mistério", "misterio"
+        )
+    ):
+        return "curiosidade"
+
+    # 4. Default: Notícia Oficial
+    return "noticia"
 
 
 _JOURNALESE_PREFIX_RE = re.compile(
@@ -262,22 +297,39 @@ def _build_viral_hook(archetype: str, clean_topic: str, game_name: str, facts: l
     return badge, hook
 
 
-def _build_binary_cta(archetype: str, clean_topic: str, selected_facts_text: str, game_name: str) -> str:
+def _build_varied_cta(archetype: str, clean_topic: str, selected_facts_text: str, game_name: str) -> str:
+    """Build archetype-specific, varied CTAs avoiding repetitive formulas (Tarefa 2.1)."""
+    canon = archetype
+    if canon in ("contraste_detalhe", "gameplay_imersao", "lista_open_loop"):
+        canon = "curiosidade"
+    elif canon == "raio_x_numeros":
+        canon = "noticia"
+
     head_low = clean_topic.lower()
     body_low = f"{head_low} {selected_facts_text.lower()}"
 
-    if any(k in body_low for k in ("custo", "orçamento", "bilhão", "bilhões", "milhões", "caro", "gasto", "dinheiro", "preço", "preco")):
-        return f"Você pagaria mais caro se {game_name} realmente for uma obra-prima ou o preço tem que ficar travado nos 70 dólares? Comenta aí!"
-    if any(k in body_low for k in ("polícia", "policia", "perfil", "k9", "combate", "lucia", "jason")):
-        return f"No seu primeiro save de {game_name}, você vai jogar mais frio e profissional ou tocando o terror desde o início? Comenta aí!"
-    if any(k in body_low for k in ("pc", "física", "fisica", "data", "disco", "console")):
-        return f"Você já vai garantir {game_name} no lançamento no console ou vai esperar sair no PC e baixar o preço? Comenta aí!"
-    if any(k in body_low for k in ("mapa", "leonida", "vice city", "tamanho")):
-        return f"Qual lugar você vai explorar primeiro quando colocar as mãos no jogo: as ruas de Vice City ou os pântanos de Leonida? Comenta aí!"
-    if any(k in body_low for k in ("ps5", "dualsense", "60 fps", "fps", "gráficos")):
-        return f"No seu setup, pesa mais rodar a 60 FPS cravado ou ter gráficos no talo com ray tracing? Deixa sua opinião!"
+    if canon == "teoria_rumor":
+        return f"Na sua opinião sincera: essa teoria tem cara de verdade ou é pura especulação? Quero saber sua opinião nos comentários!"
 
-    return f"Você acha que {game_name} vai entregar tudo isso no dia 1 ou ainda vem surpresa? Comenta aí!"
+    if canon == "curiosidade":
+        return f"Você já tinha reparado nesse detalhe nos trailers ou foi novidade pra você? Manda para aquele amigo que é viciado em {game_name}!"
+
+    if canon == "polemica_comparacao":
+        if any(k in body_low for k in ("preço", "preco", "caro", "80 dólares", "custo", "bilhão", "dinheiro")):
+            return f"Você pagaria mais caro se {game_name} realmente for uma obra-prima ou o preço tem que ficar travado nos 70 dólares? Comenta aí!"
+        return f"E você, de que lado dessa treta fica: apoia a decisão ou acha que os jogadores têm razão em reclamar? Deixa seu comentário!"
+
+    # Archetype 'noticia' or default
+    if any(k in body_low for k in ("pc", "console", "plataforma")):
+        return f"Você já vai garantir no lançamento para console ou vai esperar sair no PC? Deixa nos comentários e já segue para mais novidades!"
+    if any(k in body_low for k in ("mapa", "leonida", "vice city")):
+        return f"Qual o primeiro lugar que você quer explorar quando colocar as mãos no jogo? Comenta aí e já deixa o like!"
+
+    return f"Qual a sua expectativa para ver essa novidade rodando na prática? Deixa seu comentário e já se inscreve para não perder nada de {game_name}!"
+
+
+def _build_binary_cta(archetype: str, clean_topic: str, selected_facts_text: str, game_name: str) -> str:
+    return _build_varied_cta(archetype, clean_topic, selected_facts_text, game_name)
 
 
 def synthesize_gaming_short_script(
@@ -305,99 +357,75 @@ def synthesize_gaming_short_script(
 
     combined_text = f"{clean_topic} {clean_angle} {art_summary} {' '.join(raw_facts)}".lower()
     is_rumor = any(k in str(fact_confidence).lower() for k in ("rumor", "vaza", "especula", "não verificado", "nao_verificado"))
-    archetype = _pick_viral_archetype(clean_topic, combined_text, requested=viral_archetype)
+    status_conf = "rumor" if is_rumor else ("confirmado" if any(k in str(fact_confidence).lower() for k in ("oficial", "confirmad")) else "reportado")
+    archetype = _pick_viral_archetype(clean_topic, combined_text, requested=viral_archetype, status_confiabilidade=status_conf)
     effects = ["zoom_in", "pan_right", "zoom_out", "pan_left", "zoom_in", "zoom_out"]
 
-    # Detect high-impact topic category
-    is_budget = any(k in combined_text for k in ("custo", "orçamento", "bilhão", "bilhões", "milhões", "caro", "gasto", "dinheiro", "mais caro"))
-    is_police = any(k in combined_text for k in ("polícia", "policia", "k9", "cães", "armas", "tiro", "perseguição", "perseguicao", "combate", "fuga", "procurado", "stinger"))
-    is_release = any(k in combined_text for k in ("data de lançamento", "plataformas", "versão para pc", "versão de pc", "outono de 2026", "adiamento", "adiado", "disco físico", "mídia física"))
-    is_map = any(k in combined_text for k in ("mapa", "leonida", "vice city", "tamanho do mapa", "locais", "bairros", "pântano", "vaza", "vazamento do mapa"))
-    is_graphics = any(k in combined_text for k in ("gráficos", "graficos", "física", "fisica", "água", "60 fps", "fps", "ray tracing", "rage", "motor", "tecnologia", "ia"))
-    is_story = any(k in combined_text for k in ("lucia", "jason", "casal", "história", "prisão", "assalto", "protagonista", "bonnie"))
+    canon_archetype = archetype
+    if canon_archetype in ("contraste_detalhe", "gameplay_imersao", "lista_open_loop"):
+        canon_archetype = "curiosidade"
+    elif canon_archetype == "raio_x_numeros":
+        canon_archetype = "noticia"
+    elif canon_archetype not in ("noticia", "curiosidade", "teoria_rumor", "polemica_comparacao"):
+        canon_archetype = "noticia"
+
+    cleaned_facts = [_clean_narrative_sentence(f) for f in raw_facts if len(f.split()) >= 6]
+    if not cleaned_facts and art_summary:
+        cleaned_facts = [_clean_narrative_sentence(s) for s in re.split(r"(?<=[.!?])\s+", art_summary) if len(s.split()) >= 6]
+
+    while len(cleaned_facts) < 4:
+        defaults = [
+            f"Essa novidade em torno de {game_name} chamou a atenção de toda a comunidade gamer.",
+            "Os bastidores mostram a grandiosidade e o nível de detalhe que a Rockstar está preparando.",
+            "A experiência promete elevar os padrões técnicos para toda a atual geração de consoles.",
+            "O impacto prático será sentido logo nos primeiros minutos explorando o mapa de Vice City.",
+        ]
+        cleaned_facts.append(defaults[len(cleaned_facts)])
 
     scenes_spec: list[dict[str, str]] = []
 
-    if is_budget:
-        scenes_spec = [
-            {"title": "🎯 GANCHO VIRAL", "text": f"Vazaram os números reais da produção de {game_name} — e o custo total dessa história tá deixando todo mundo em choque!"},
-            {"title": "💰 O QUE FOI REVELADO", "text": f"Fontes e analistas da indústria apontam que a produção de {game_name} custou entre 1,5 e 2 bilhões de dólares, se tornando o jogo mais caro da história."},
-            {"title": "📊 COMPARAÇÃO DE ESCALA", "text": f"Pra ter noção do tamanho desse valor: Red Dead Redemption 2 custou cerca de 500 milhões — ou seja, {game_name} pode ter custado até quatro vezes mais!"},
-            {"title": "🏙️ ONDE FOI O INVESTIMENTO", "text": f"A equipe da Rockstar saltou para quase 5 mil desenvolvedores em 12 estúdios, investindo pesado em física hiper-realista e no mapa colossal de Vice City."},
-            {"title": "⚡ A VIRADA NO BOLSO", "text": "Só que para pagar essa conta bilionária, analistas alertam que o jogo pode inaugurar a nova faixa de 80 dólares no lançamento."},
-            {"title": "📣 CTA FINAL", "text": f"Você pagaria mais caro se {game_name} realmente for essa obra-prima ou o preço tem que ficar travado nos 70 dólares? Comenta aí!"},
-        ]
-    elif is_police:
-        scenes_spec = [
-            {"title": "🎯 GANCHO VIRAL", "text": f"A polícia de {game_name} vai ser a mais perigosa de toda a história da franquia — se liga no que a Rockstar confirmou!"},
-            {"title": "🚨 O QUE SAIU", "text": f"A polícia agora contará com unidades K9 e cães farejadores treinados para caçar Jason e Lucia implacavelmente."},
-            {"title": "⚡ NA PRÁTICA", "text": "Em perseguições a pé ou após acidentes de moto e carro, os cães alcançam os protagonistas antes mesmo das viaturas chegarem."},
-            {"title": "🎯 NÍVEL DE DETALHE", "text": "Além disso, os policiais usam tapetes de espinhos nas rodovias e táticas de cerco dinâmico com inteligência artificial avançada."},
-            {"title": "🚓 O QUE MUDA", "text": "Isso significa que escapar das perseguições de 5 estrelas vai exigir planejamento tático e rotas de fuga muito bem pensadas."},
-            {"title": "📣 CTA FINAL", "text": f"No seu primeiro save de {game_name}, você vai jogar mais frio e profissional ou tocando o terror desde o início? Comenta aí!"},
-        ]
-    elif is_release:
-        scenes_spec = [
-            {"title": "🎯 GANCHO VIRAL", "text": f"{game_name} já tem janela e plataformas confirmadas — mas tem uma notícia tensa que você precisa saber agora!"},
-            {"title": "📅 A DATA OFICIAL", "text": f"O lançamento oficial está confirmado para o outono de 2026 no PlayStation 5 e Xbox Series X e S."},
-            {"title": "💻 E A VERSÃO DE PC?", "text": "Só que tem um detalhe que frustrou a comunidade: a versão para PC não sai no dia 1 e deve chegar apenas em 2027."},
-            {"title": "💿 MÍDIA FÍSICA E PREÇO", "text": "Além disso, as versões em disco físico podem ter tiragem limitada, priorizando as lojas digitais com download antecipado."},
-            {"title": "⚡ A ESCOLHA DO JOGADOR", "text": "Quem joga exclusivamente no computador terá que decidir se compra um console ou espera meses encarando spoilers na internet."},
-            {"title": "📣 CTA FINAL", "text": f"Você já vai garantir {game_name} no lançamento no console ou vai esperar sair no PC e baixar o preço? Comenta aí!"},
-        ]
-    elif is_map:
-        scenes_spec = [
-            {"title": "🎯 GANCHO VIRAL", "text": f"Novos detalhes do mapa colossal de {game_name} foram revelados — e o tamanho desse mundo aberto vai te impressionar!"},
-            {"title": "🗺️ O MUNDO DE LEONIDA", "text": f"O estado fictício de Leonida traz uma recriação expandida de Vice City com praias, ilhas tropicais e pântanos profundos."},
-            {"title": "🏢 PRÉDIOS EXPLORÁVEIS", "text": "Diferente dos jogos anteriores, grande parte dos prédios comerciais, clubes e residências terá interiores 100% exploráveis."},
-            {"title": "🌴 VIDA ORGÂNICA", "text": "A inteligência artificial dos pedestres cria eventos orgânicos nas ruas, festas nas praias e encontros policiais dinâmicos."},
-            {"title": "📏 ESCALA MONUMENTAL", "text": f"A área total do mapa é mais que o dobro do tamanho de GTA 5, com biomas e ecossistemas completamente vivos."},
-            {"title": "📣 CTA FINAL", "text": "Qual lugar você vai explorar primeiro quando colocar as mãos no jogo: as ruas de Vice City ou os pântanos de Leonida? Comenta aí!"},
-        ]
-    elif is_graphics:
-        scenes_spec = [
-            {"title": "🎯 GANCHO VIRAL", "text": f"A tecnologia gráfica e física de {game_name} está deixando desenvolvedores do mundo inteiro de boca aberta!"},
-            {"title": "🌊 MOTOR RAGE EXPANDIDO", "text": "A nova versão do motor gráfico RAGE traz simulação de água, reflexos e iluminação em tempo real jamais vistos na indústria."},
-            {"title": "🚗 FÍSICA HIPER-REALISTA", "text": "A deformação dos carros nos acidentes, a movimentação dos tecidos e as reações dos NPCs elevam o padrão para outro patamar."},
-            {"title": "⚙️ O FOCO EM 60 FPS", "text": f"O grande desafio da Rockstar agora é manter toda essa densidade visual rodando com estabilidade e fluidez a 60 FPS."},
-            {"title": "🚀 SALTO GERACIONAL", "text": f"Tudo indica que {game_name} será o divisor de águas definitivo para mostrar o verdadeiro poder da atual geração de consoles."},
-            {"title": "📣 CTA FINAL", "text": "No seu setup, pesa mais rodar a 60 FPS cravado ou ter gráficos no talo com ray tracing? Deixa sua opinião!"},
-        ]
-    elif is_story:
-        scenes_spec = [
-            {"title": "🎯 GANCHO VIRAL", "text": f"A história de Jason e Lucia em {game_name} promete a narrativa mais madura e tensa de toda a história da franquia!"},
-            {"title": "🔫 BONNIE E CLYDE MODERNO", "text": "Inspirada no clássico casal fora da lei, a trama coloca a dupla em assaltos arriscados pelo submundo de Leonida."},
-            {"title": "🤝 DINÂMICA DE DUPLA", "text": "A jogabilidade alterna entre os dois protagonistas, onde as decisões e a química do casal afetam o desenrolar das missões."},
-            {"title": "🎬 CAPTURA CINEMATOGRÁFICA", "text": "Com dublagem e captura facial de ponta, cada golpe exige coordenação mútua para não terminar em tiroteio descontrolado."},
-            {"title": "⚖️ ESCOLHAS E LEALDADE", "text": "Fontes indicam que o enredo trará escolhas morais pesadas que podem colocar a lealdade entre Jason e Lucia à prova."},
-            {"title": "📣 CTA FINAL", "text": "Você acha que Jason e Lucia vão terminar juntos triunfando no final ou a história vai acabar em traição? Comenta aí!"},
-        ]
-    else:
-        # Dynamic Fact Weaver: extract the 4 best cleaned sentences from the dossier
-        cleaned_facts = [_clean_narrative_sentence(f) for f in raw_facts if len(f.split()) >= 8]
-        if not cleaned_facts and art_summary:
-            cleaned_facts = [_clean_narrative_sentence(s) for s in re.split(r"(?<=[.!?])\s+", art_summary) if len(s.split()) >= 8]
-
-        while len(cleaned_facts) < 4:
-            defaults = [
-                f"Essa nova confirmação de {game_name} pegou a comunidade gamer de surpresa.",
-                "A novidade traz detalhes técnicos importantes sobre a escala e o mundo do jogo.",
-                "A Rockstar Games segue trabalhando pesado para entregar uma experiência definitiva.",
-                "O impacto dessas mudanças será sentido diretamente na jogabilidade final.",
-            ]
-            cleaned_facts.append(defaults[len(cleaned_facts)])
-
-        hook_badge, hook_text = _build_viral_hook(archetype, clean_topic, game_name, cleaned_facts, is_rumor=is_rumor)
-        cta_text = _build_binary_cta(archetype, clean_topic, " ".join(cleaned_facts), game_name)
-
-        first_connector = "Segundo os rumores e vazamentos mais comentados," if is_rumor else "A grande novidade confirmada revela que"
+    if canon_archetype == "noticia":
+        # 5 Cenas: Gancho Noticioso → Fato Central → Contexto & Escala → Impacto Real → Expectativa
+        hook_badge, hook_text = _build_viral_hook("noticia", clean_topic, game_name, cleaned_facts, is_rumor=False)
+        cta_text = _build_varied_cta("noticia", clean_topic, " ".join(cleaned_facts), game_name)
         scenes_spec = [
             {"title": hook_badge, "text": hook_text},
-            {"title": "O Que Saiu" if not is_rumor else "O Que Está Circulando", "text": _humanize_fact(cleaned_facts[0], connector=first_connector)},
-            {"title": "Na Prática", "text": _humanize_fact(cleaned_facts[1], connector="Pra entender o impacto disso:")},
-            {"title": "O Impacto Real", "text": _humanize_fact(cleaned_facts[2], connector="Na prática, tudo isso muda a experiência porque")},
-            {"title": "A Virada", "text": _humanize_fact(cleaned_facts[3], connector="Só que tem um detalhe importante: enquanto parte dos fãs debate a veracidade,")},
-            {"title": "Qual Você Escolhe?", "text": cta_text},
+            {"title": "📢 FATO CENTRAL", "text": _humanize_fact(cleaned_facts[0], connector="O que foi divulgado oficialmente revela que")},
+            {"title": "🔍 CONTEXTO & ESCALA", "text": _humanize_fact(cleaned_facts[1], connector="Pra você entender a importância disso no projeto:")},
+            {"title": "⚡ NA PRÁTICA", "text": _humanize_fact(cleaned_facts[2], connector="Isso impacta diretamente a jogabilidade porque")},
+            {"title": "💬 QUAL SUA EXPECTATIVA?", "text": cta_text},
+        ]
+    elif canon_archetype == "curiosidade":
+        # 5 Cenas: Gancho Oculto → A Evidência → Detalhe Técnico → A Revelação → Fechamento
+        hook_badge, hook_text = _build_viral_hook("curiosidade", clean_topic, game_name, cleaned_facts, is_rumor=False)
+        cta_text = _build_varied_cta("curiosidade", clean_topic, " ".join(cleaned_facts), game_name)
+        scenes_spec = [
+            {"title": hook_badge, "text": hook_text},
+            {"title": "🔎 A EVIDÊNCIA", "text": _humanize_fact(cleaned_facts[0], connector="Ao analisar atentamente os materiais divulgados, nota-se que")},
+            {"title": "⚙️ DETALHE TÉCNICO", "text": _humanize_fact(cleaned_facts[1], connector="O funcionamento minucioso por trás disso mostra que")},
+            {"title": "💡 A REVELAÇÃO", "text": _humanize_fact(cleaned_facts[2], connector="Isso comprova o nível inacreditável de realismo que a Rockstar está preparando.")},
+            {"title": "🚀 JÁ SABIA DISSO?", "text": cta_text},
+        ]
+    elif canon_archetype == "teoria_rumor":
+        # 5 Cenas: Pergunta/Gancho → Os Indícios → A Hipótese → O Contraponto → Debate
+        hook_badge, hook_text = _build_viral_hook("teoria_rumor", clean_topic, game_name, cleaned_facts, is_rumor=True)
+        cta_text = _build_varied_cta("teoria_rumor", clean_topic, " ".join(cleaned_facts), game_name)
+        scenes_spec = [
+            {"title": hook_badge, "text": hook_text},
+            {"title": "📜 OS INDÍCIOS", "text": _humanize_fact(cleaned_facts[0], connector="Segundo rumores recentes e vazamentos debatidos pela comunidade,")},
+            {"title": "🧩 A HIPÓTESE", "text": _humanize_fact(cleaned_facts[1], connector="A teoria que ganhou mais força sugere que")},
+            {"title": "⚖️ O CONTRAPONTO", "text": _humanize_fact(cleaned_facts[2], connector="Só que vale ponderar com cautela: até agora a Rockstar não confirmou nada oficialmente.")},
+            {"title": "🗣️ QUAL SUA TEORIA?", "text": cta_text},
+        ]
+    elif canon_archetype == "polemica_comparacao":
+        # 4 Cenas: O Dilema → Argumentos A → As Críticas B → O Veredito
+        hook_badge, hook_text = _build_viral_hook("polemica_comparacao", clean_topic, game_name, cleaned_facts, is_rumor=is_rumor)
+        cta_text = _build_varied_cta("polemica_comparacao", clean_topic, " ".join(cleaned_facts), game_name)
+        scenes_spec = [
+            {"title": hook_badge, "text": hook_text},
+            {"title": "⚔️ LADO A: A DEFESA", "text": _humanize_fact(cleaned_facts[0], connector="Por um lado, analistas e defensores afirmam que")},
+            {"title": "🛡️ LADO B: AS CRÍTICAS", "text": _humanize_fact(cleaned_facts[1], connector="Por outro lado, milhares de jogadores criticam e apontam que")},
+            {"title": "🎯 DE QUE LADO VOCÊ FICA?", "text": cta_text},
         ]
 
     if is_rumor:
@@ -493,20 +521,42 @@ def synthesize_gaming_short_script(
     }
 
 
-def enforce_script_duration_budget(raw_scenes: list[dict[str, Any]], max_words: int = 160) -> list[dict[str, Any]]:
-    """Enforce strict YouTube Shorts duration ceiling without chopping sentences mid-clause."""
+def enforce_script_duration_budget(raw_scenes: list[dict[str, Any]], max_words: int = 140) -> list[dict[str, Any]]:
+    """Enforce strict YouTube Shorts duration ceiling without chopping sentences mid-clause (Tarefa 2.2)."""
     total_words = sum(len(s.get("narration_text", "").split()) for s in raw_scenes)
     if total_words <= max_words:
         return raw_scenes
 
     excess = total_words - max_words
+    n_scenes = len(raw_scenes)
+    # Middle scenes are from 1 to n_scenes - 2 (keeping Hook 0 and CTA n_scenes-1 intact if possible)
+    middle_indices = [i for i in range(1, n_scenes - 1)] if n_scenes > 2 else [0]
+
+    min_floor = max(8, int(max_words / max(1, n_scenes)))
     for sc in raw_scenes:
-        if sc.get("index") in (3, 4, 5) and excess > 0:
+        if sc.get("index") in middle_indices and excess > 0:
             words = sc.get("narration_text", "").split()
-            if len(words) > 22:
-                cut = min(excess, len(words) - 22)
-                sc["narration_text"] = _clean_narrative_sentence(sc["narration_text"], max_words=len(words) - cut)
-                excess -= cut
+            if len(words) > min_floor:
+                cut = min(excess, len(words) - min_floor)
+                cleaned = _clean_narrative_sentence(sc["narration_text"], max_words=len(words) - cut)
+                new_len = len(cleaned.split())
+                actual_cut = max(0, len(words) - new_len)
+                sc["narration_text"] = cleaned
+                excess -= actual_cut
+
+    if excess > 0:
+        for sc in raw_scenes:
+            if excess <= 0:
+                break
+            words = sc.get("narration_text", "").split()
+            if len(words) > 8:
+                cut = min(excess, len(words) - 8)
+                cleaned = _clean_narrative_sentence(sc["narration_text"], max_words=len(words) - cut)
+                new_len = len(cleaned.split())
+                actual_cut = max(0, len(words) - new_len)
+                sc["narration_text"] = cleaned
+                excess -= actual_cut
+
     return raw_scenes
 
 

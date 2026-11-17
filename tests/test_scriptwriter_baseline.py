@@ -12,7 +12,7 @@ def test_offline_template_script_generation():
         viral_archetype="auto"
     )
     assert "scenes" in result
-    assert len(result["scenes"]) == 6
+    assert 4 <= len(result["scenes"]) <= 6
     assert result["hook_title"]
     assert len(result["youtube_title"]) <= 100
     assert len(result["narration_full"]) > 50

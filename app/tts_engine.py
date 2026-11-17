@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import re
 import subprocess
 import time
@@ -11,6 +12,8 @@ from typing import Any
 
 from app.config import get_ffmpeg_exe, get_gemini_api_key, get_tts_model
 from app.models import SceneItem, WordTiming
+
+logger = logging.getLogger(__name__)
 
 
 EDGE_VOICES_PT_BR = [
@@ -259,26 +262,58 @@ def synthesize_narration(
     voice_name: str = "pt-BR-AntonioNeural",
     api_key_override: str | None = None,
     rate: str = "+6%",
+    max_duration_sec: float = 58.0,
 ) -> tuple[Path, list[tuple[int, float, float]], list[WordTiming], str]:
     """
     Synthesize each scene separately for exact scene-to-visual synchronization,
-    then concatenate into narration_full.wav (used by `two_reels_combo`).
+    then concatenate into narration_full.wav, strictly enforcing real duration <= max_duration_sec (Tarefa 2.2).
     Returns: (full_wav_path, [(scene_index, start_sec, end_sec), ...], global_word_timings, actual_engine_used)
     """
     tts_dir = work_dir / "tts"
     tts_dir.mkdir(parents=True, exist_ok=True)
     pause_wav = tts_dir / "pause.wav"
-    pause_dur = 0.18
+    pause_dur = 0.16
     _generate_silence_wav(pause_wav, duration_sec=pause_dur)
 
-    segments, actual_engine = synthesize_narration_segments(
-        scenes=scenes,
-        work_dir=work_dir,
-        tts_engine=tts_engine,
-        voice_name=voice_name,
-        api_key_override=api_key_override,
-        rate=rate,
-    )
+    cur_rate = rate or "+6%"
+    fallback_rates = ["+12%", "+16%", "+20%", "+24%", "+28%"]
+    rate_candidates = [cur_rate] + [r for r in fallback_rates if r != cur_rate]
+
+    segments: list[dict[str, Any]] = []
+    actual_engine = tts_engine
+    for r in rate_candidates:
+        segments, actual_engine = synthesize_narration_segments(
+            scenes=scenes,
+            work_dir=work_dir,
+            tts_engine=tts_engine,
+            voice_name=voice_name,
+            api_key_override=api_key_override,
+            rate=r,
+        )
+        total_voice = sum(float(seg["duration_sec"]) for seg in segments)
+        total_time = total_voice + pause_dur * max(0, len(segments) - 1)
+        if total_time <= max_duration_sec:
+            break
+
+    # If still exceeding, compact middle sentences proportionally
+    total_voice = sum(float(seg["duration_sec"]) for seg in segments)
+    total_time = total_voice + pause_dur * max(0, len(segments) - 1)
+    if total_time > max_duration_sec:
+        from app.gaming_scriptwriter import enforce_script_duration_budget
+        sc_dicts = [s.model_dump() for s in scenes]
+        total_w = sum(len(s.narration_text.split()) for s in scenes)
+        scale_target = max(60, int(total_w * ((max_duration_sec - 1.0) / max(1.0, total_time))))
+        trimmed = enforce_script_duration_budget(sc_dicts, max_words=scale_target)
+        for orig, td in zip(scenes, trimmed):
+            orig.narration_text = str(td.get("narration_text", orig.narration_text))
+        segments, actual_engine = synthesize_narration_segments(
+            scenes=scenes,
+            work_dir=work_dir,
+            tts_engine=tts_engine,
+            voice_name=voice_name,
+            api_key_override=api_key_override,
+            rate=rate_candidates[-1],
+        )
 
     wav_parts: list[Path] = []
     scene_spans: list[tuple[int, float, float]] = []
@@ -310,5 +345,6 @@ def synthesize_narration(
         cursor = scene_end
 
     full_wav = tts_dir / "narration_full.wav"
-    _concat_wavs(wav_parts, full_wav)
+    final_dur = _concat_wavs(wav_parts, full_wav)
+    logger.info("Narração concatenada em %s: %.2fs (máx %.1fs, motor: %s).", full_wav, final_dur, max_duration_sec, actual_engine)
     return full_wav, scene_spans, all_words, actual_engine

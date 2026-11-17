@@ -30,7 +30,8 @@ _PT_HINTS_RE = re.compile(
     r"[ãõçáéíóúâêô]|"
     r"\b(?:não|para|sobre|como|jogo|novo|nova|lançamento|confirmado|confirmada|"
     r"pelo|pela|entre|chega|mostra|vai|está|são|tem|com|tudo|hoje|trailer de|"
-    r"versão|data|revela|saiba|confira|mais|ainda|pode|melhor|piores)\b",
+    r"versão|data|revela|saiba|confira|mais|ainda|pode|melhor|piores|"
+    r"de|do|da|dos|das|em|no|na|nos|nas|um|uma|suporte|detalhes|detalha|plataforma|plataformas)\b",
     flags=re.IGNORECASE,
 )
 _EN_HINTS_RE = re.compile(
@@ -52,7 +53,9 @@ def looks_english_text(text: str) -> bool:
     en_hits = len(_EN_HINTS_RE.findall(clean))
     if pt_hits >= 2 and en_hits <= 1:
         return False
-    return en_hits >= 1 or pt_hits == 0
+    if en_hits == 0:
+        return False
+    return en_hits >= pt_hits
 
 
 def translate_to_pt_br(text: str, client: httpx.Client | None = None) -> str:
