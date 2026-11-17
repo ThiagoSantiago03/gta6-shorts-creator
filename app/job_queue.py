@@ -395,6 +395,7 @@ def setup_production_stage_handlers(manager: JobQueueManager) -> None:
             data_publicacao=job.input_data.get("published_at", ""),
             fact_confidence=job.input_data.get("confidence", "Notícia / Imprensa"),
             status_confiabilidade=job.input_data.get("status_confiabilidade", "reportado"),
+            publish_intent=job.input_data.get("publish_intent", "commercial"),
             max_duration_sec=58.0,
             speech_rate="+14%",
             viral_archetype=str(g_data.get("viral_archetype") or "auto"),

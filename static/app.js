@@ -221,12 +221,18 @@ function renderProjectsSidebar() {
     }
 
     const title = proj.title || proj.song_title || "Sem título";
+    const intentLabels = {
+      commercial: "Comercial",
+      editorial: "Editorial",
+      non_commercial: "Não comercial",
+    };
+    const intentLabel = intentLabels[proj.publish_intent || "commercial"] || "Comercial";
 
     div.innerHTML = `
       <div class="proj-title">${escapeHtml(title)}</div>
       <div class="proj-meta">
         <span class="proj-badge ${badgeClass}">${badgeText}</span>
-        <small class="muted">${proj.scenes?.length || 0} cenas • <=58s</small>
+        <small class="muted">${escapeHtml(intentLabel)} • ${proj.scenes?.length || 0} cenas • <=58s</small>
       </div>
       <div class="proj-item-actions">
         <button type="button" class="quick-toggle-posted-btn ${proj.is_posted ? "is-posted" : ""}" title="${proj.is_posted ? "Clique para desmarcar postagem" : "Clique para marcar como postado"}">
@@ -245,11 +251,29 @@ function renderProjectsSidebar() {
   });
 }
 
+async function refreshRightsPreview(projectId) {
+  const banner = document.getElementById("rightsPreviewBanner");
+  if (!banner || !projectId) return;
+  try {
+    const preview = await api(`/api/projects/${projectId}/rights-preview`);
+    if (preview.warning) {
+      banner.textContent = `⚠️ [${preview.publish_intent}] ${preview.warning}`;
+      banner.classList.remove("hidden");
+    } else {
+      banner.textContent = "";
+      banner.classList.add("hidden");
+    }
+  } catch (err) {
+    banner.classList.add("hidden");
+  }
+}
+
 async function loadProject(id) {
   try {
     CURRENT_PROJECT = await api(`/api/projects/${id}`);
     updateProjectHeader();
     renderProjectsSidebar();
+    refreshRightsPreview(id);
 
     // Se estiver no step 1, exibe o aviso de que está editando
     const editingBanner = document.getElementById("step1EditingBanner");
@@ -571,6 +595,7 @@ async function submitCreateProject() {
   const archetypeSelect = document.getElementById("gamingViralArchetypeSelect");
   const sourceUrlInput = document.getElementById("gamingSourceUrlInput");
   const angleInput = document.getElementById("topicAngleInput");
+  const intentSelect = document.getElementById("publishIntentSelect");
 
   const title = titleInput?.value.trim();
   if (!title) {
@@ -584,6 +609,7 @@ async function submitCreateProject() {
     topic_angle: angleInput?.value.trim() || "",
     topic_source_url: sourceUrlInput?.value.trim() || "",
     viral_archetype: archetypeSelect?.value || "auto",
+    publish_intent: intentSelect?.value || "commercial",
     niche: "gaming_news",
     style_preset: "vice_city_neon",
     subtitle_style: "vice_city",
@@ -608,6 +634,7 @@ async function submitCreateProject() {
     CURRENT_PROJECT = proj;
     showToast("Roteiro e cortes de trailer criados com sucesso!", "success");
     await loadProjects();
+    refreshRightsPreview(proj.id);
     goToStep(2);
   } catch (err) {
     showToast(`Erro ao criar projeto: ${err.message}`, "error");
@@ -623,12 +650,14 @@ async function handleBatchDailyAutomation() {
   if (!confirm("Deseja disparar a automação diária autônoma para criar 5 YouTube Shorts a partir das notícias mais quentes de hoje?")) {
     return;
   }
+  const intentSelect = document.getElementById("publishIntentSelect");
+  const publishIntent = intentSelect?.value || "commercial";
   showToast("Disparando automação autônoma de 5 Shorts...", "info");
   try {
     const res = await api("/api/automation/batch-daily", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count: 5, query: "GTA 6", geo: "BR" }),
+      body: JSON.stringify({ count: 5, query: "GTA 6", geo: "BR", publish_intent: publishIntent }),
     });
     showToast(`Automação concluída! ${res.count} vídeos gerados e roteirizados na fila.`, "success");
     await loadProjects();

@@ -12,7 +12,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 logger = logging.getLogger("gta6_studio")
@@ -474,6 +474,61 @@ def get_project(project_id: str) -> dict[str, Any]:
     return _load_project(project_id).model_dump()
 
 
+@app.get("/api/projects/{project_id}/rights-preview")
+def get_project_rights_preview(project_id: str) -> dict[str, Any]:
+    """T7: Exibe antecipadamente quais mídias da biblioteca estão liberadas ou bloqueadas para a finalidade do projeto."""
+    from app.gaming_media import load_media_catalog
+    from app.rights import media_allowed
+
+    project = _load_project(project_id)
+    intent = getattr(project, "publish_intent", "commercial") or "commercial"
+    catalog = load_media_catalog()
+    items = catalog.get("items", [])
+
+    allowed: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+    allowed_trailers = 0
+    blocked_trailers = 0
+
+    for item in items:
+        ok, reason = media_allowed(item, intent)
+        entry_summary = {
+            "media_id": item.get("media_id", ""),
+            "filename": item.get("filename", ""),
+            "media_type": item.get("media_type", "video"),
+            "authorization_status": item.get("authorization_status", "unknown"),
+            "commercial_use_allowed": bool(item.get("commercial_use_allowed", False)),
+            "allowed": ok,
+            "reason": reason,
+        }
+        is_video = item.get("media_type") == "video"
+        if ok:
+            allowed.append(entry_summary)
+            if is_video:
+                allowed_trailers += 1
+        else:
+            blocked.append(entry_summary)
+            if is_video:
+                blocked_trailers += 1
+
+    warning = ""
+    if allowed_trailers == 0 and blocked_trailers > 0:
+        warning = (
+            "Nenhum trailer da biblioteca está liberado para esta finalidade; "
+            "o vídeo será gerado sem trailers de fundo."
+        )
+
+    return {
+        "project_id": project.id,
+        "publish_intent": intent,
+        "allowed": allowed,
+        "blocked": blocked,
+        "allowed_trailers_count": allowed_trailers,
+        "blocked_trailers_count": blocked_trailers,
+        "warning": warning,
+    }
+
+
 @app.get("/api/projects/{project_id}/packed", response_class=PlainTextResponse)
 def get_packed_timeline(project_id: str) -> PlainTextResponse:
     packed = _project_dir(project_id) / "project_packed.md"
@@ -486,6 +541,7 @@ class BatchDailyRequest(BaseModel):
     count: int = 5
     query: str = "GTA 6"
     geo: str = "BR"
+    publish_intent: Literal["commercial", "editorial", "non_commercial"] = "commercial"
 
 
 @app.post("/api/automation/batch-daily")
@@ -543,6 +599,7 @@ def create_batch_daily(req: BatchDailyRequest) -> dict[str, Any]:
                 data_publicacao=getattr(item, "data_publicacao", "") or item.published_at or "",
                 fact_confidence=item.confidence or "Notícia / Imprensa",
                 status_confiabilidade=getattr(item, "status_confiabilidade", "reportado"),
+                publish_intent=req.publish_intent,
                 max_duration_sec=58.0,
                 speech_rate="+14%",
                 viral_archetype=str(g_data.get("viral_archetype") or "auto"),
@@ -640,6 +697,7 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
             topic_angle=resolved_angle,
             topic_source_url=req.topic_source_url.strip(),
             fact_confidence=(req.fact_confidence or "Notícia / Imprensa").strip(),
+            publish_intent=req.publish_intent,
             max_duration_sec=max_cap,
             speech_rate=sp_rate,
             viral_archetype=str(g_data.get("viral_archetype") or v_arch),
@@ -1810,6 +1868,7 @@ class CreateBatchJobsRequest(BaseModel):
     query: str = "GTA 6"
     geo: str = "BR"
     count: int = 5
+    publish_intent: Literal["commercial", "editorial", "non_commercial"] = "commercial"
 
 
 @app.post("/api/queue/jobs/batch")
@@ -1819,9 +1878,11 @@ def create_batch_jobs_queue(req: CreateBatchJobsRequest) -> dict[str, Any]:
     if req.topics:
         for t in req.topics:
             if isinstance(t, dict):
-                items_to_enqueue.append(t)
+                item_copy = dict(t)
+                item_copy.setdefault("publish_intent", req.publish_intent)
+                items_to_enqueue.append(item_copy)
             else:
-                items_to_enqueue.append({"title": str(t).strip()})
+                items_to_enqueue.append({"title": str(t).strip(), "publish_intent": req.publish_intent})
     else:
         radar_items = fetch_daily_gaming_radar(query=req.query.strip() or "GTA 6", geo=req.geo.strip() or "BR")
         valid_items = [
@@ -1838,6 +1899,7 @@ def create_batch_jobs_queue(req: CreateBatchJobsRequest) -> dict[str, Any]:
                 "published_at": it.published_at or "",
                 "confidence": it.confidence or "Notícia / Imprensa",
                 "status_confiabilidade": getattr(it, "status_confiabilidade", "reportado"),
+                "publish_intent": req.publish_intent,
             })
 
     if not items_to_enqueue:

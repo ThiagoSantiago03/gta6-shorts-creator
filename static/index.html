@@ -149,6 +149,17 @@
                   <input type="text" id="gamingSourceUrlInput" placeholder="https://olhardigital.com.br/... ou https://voxel.com.br/..." />
                 </div>
                 <div class="field full">
+                  <label>Finalidade da publicação</label>
+                  <select id="publishIntentSelect">
+                    <option value="commercial" selected>Comercial / Monetizado (padrão seguro — exige licença comercial)</option>
+                    <option value="editorial">Editorial / Jornalístico (permite trailers com Fair Use alegado)</option>
+                    <option value="non_commercial">Não comercial / Estudo (mesmas regras de editorial)</option>
+                  </select>
+                  <small class="muted" style="display:block; margin-top:4px;">
+                    Em modo <strong>Comercial</strong>, trailers sem permissão comercial são bloqueados automaticamente. O catálogo registra procedência, mas não confere licença legal.
+                  </small>
+                </div>
+                <div class="field full">
                   <label>Observação ou Ângulo Extra (opcional)</label>
                   <input type="text" id="topicAngleInput" placeholder="Ex: Focar na polêmica da mídia física vir apenas com código sem disco" />
                 </div>
@@ -198,6 +209,8 @@
               <button type="button" class="btn btn-secondary btn-sm" id="step2SaveBtn">💾 Salvar Roteiro</button>
             </div>
           </div>
+
+          <div id="rightsPreviewBanner" class="hidden" style="margin-bottom:14px; padding:12px 14px; border-radius:8px; background:rgba(245,158,11,0.14); border:1px solid rgba(245,158,11,0.45); color:#fde68a; font-size:13px;"></div>
 
           <div class="form-grid compact" style="margin-bottom: 14px;">
             <div class="field full">

@@ -95,6 +95,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         genre="Games / GTA 6",
         topic_angle=str(g_data.get("resolved_angle") or args.angle),
         topic_source_url=args.url,
+        publish_intent=getattr(args, "intent", "commercial") or "commercial",
         max_duration_sec=58.0,
         speech_rate="+14%",
         viral_archetype=args.archetype,
@@ -202,6 +203,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
                 data_publicacao=getattr(it, "data_publicacao", "") or it.published_at or "",
                 fact_confidence=it.confidence or "Notícia / Imprensa",
                 status_confiabilidade=getattr(it, "status_confiabilidade", "reportado"),
+                publish_intent=getattr(args, "intent", "commercial") or "commercial",
                 max_duration_sec=58.0,
                 speech_rate="+14%",
                 viral_archetype="auto",
@@ -262,6 +264,9 @@ def cmd_render(args: argparse.Namespace) -> None:
         return
 
     project = MusicStoryProject.model_validate_json(pfile.read_text(encoding="utf-8"))
+    if getattr(args, "intent", None):
+        project.publish_intent = args.intent
+        save_project_safe(project, pdir)
     odir = OUTPUTS_DIR / pid
     odir.mkdir(parents=True, exist_ok=True)
     print(f"Renderizando projeto {pid} (1080x1920 9:16 <= 58s)...")
@@ -304,14 +309,32 @@ def main() -> None:
     p_create.add_argument("--angle", default="", help="Ângulo ou foco específico")
     p_create.add_argument("--url", default="", help="URL da matéria original")
     p_create.add_argument("--archetype", default="auto", help="Estilo viral do roteiro")
+    p_create.add_argument(
+        "--intent",
+        choices=["commercial", "editorial", "non_commercial"],
+        default="commercial",
+        help="Finalidade da publicação (padrão seguro: commercial)",
+    )
     p_create.add_argument("--render", action="store_true", help="Renderizar imediatamente após criar")
 
     p_batch = sub.add_parser("batch", help="Cria automaticamente múltiplos vídeos a partir do radar")
     p_batch.add_argument("--count", type=int, default=5, help="Quantidade de vídeos (1 a 10)")
+    p_batch.add_argument(
+        "--intent",
+        choices=["commercial", "editorial", "non_commercial"],
+        default="commercial",
+        help="Finalidade da publicação para o lote (padrão seguro: commercial)",
+    )
     p_batch.add_argument("--render", action="store_true", help="Renderizar todos os vídeos em fila")
 
     p_render = sub.add_parser("render", help="Renderiza um projeto existente")
     p_render.add_argument("--project-id", required=True, help="ID do projeto")
+    p_render.add_argument(
+        "--intent",
+        choices=["commercial", "editorial", "non_commercial"],
+        default=None,
+        help="Sobrescrever finalidade da publicação antes de renderizar (opcional)",
+    )
 
     p_list = sub.add_parser("list", help="Lista todos os projetos salvos")
 

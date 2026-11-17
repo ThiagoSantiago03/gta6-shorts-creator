@@ -248,6 +248,7 @@ class CreateProjectRequest(BaseModel):
     fact_confidence: str = "Notícia / Imprensa"
     status_confiabilidade: Literal["confirmado", "reportado", "rumor", "nao_verificado"] = "reportado"
     confidence_status: str = ""
+    publish_intent: Literal["commercial", "editorial", "non_commercial"] = "commercial"
     max_duration_sec: float = 58.0
     max_continuous_trailer_sec: float = 6.0
     speech_rate: str = "+14%"
