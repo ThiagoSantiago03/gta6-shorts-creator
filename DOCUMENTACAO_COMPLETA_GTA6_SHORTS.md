@@ -1,7 +1,7 @@
 # 📚 DOCUMENTAÇÃO TÉCNICA E ARQUITETURAL COMPLETA — GTA 6 SHORTS STUDIO
 
 > **Fábrica Autônoma de YouTube Shorts sobre GTA 6 e Rockstar Games**  
-> **Formato:** 1080×1920 (9:16 Vertical) • **Teto de Duração:** $\le 58,0$ segundos • **Filosofia:** Local-First / Zero-API First com IA Generativa Opcional • **Locução:** Neural PT-BR com Timestamps de Palavras  
+> **Formato:** 1080×1920 (9:16 Vertical) • **Teto de Duração:** $\le 58,0$ segundos (decisão editorial de retenção) • **Filosofia:** Sem API paga por padrão (Local-First com serviços externos opcionais) • **Locução:** Neural PT-BR com Timestamps de Palavras  
 > **Repositório:** `D:\CriadorDeVideos`  
 > **Última Atualização:** 16 de Novembro de 2026
 
@@ -96,7 +96,7 @@ No diretório `.agents/skills/` e no ecossistema Antigravity, as seguintes skill
 - **Arquivo de Instrução:** `.agents/skills/gta6-shorts-director/SKILL.md`
 - **Diretrizes Estritas:**
   1. Vídeo vertical obrigatório 1080×1920 (9:16).
-  2. Duração máxima e inegociável de 58.0 segundos para elegibilidade garantida em YouTube Shorts.
+  2. Duração máxima de 58,0 segundos por decisão editorial para alta retenção (embora o YouTube aceite Shorts mais longos).
   3. Fundo visual sempre dinâmico, priorizando cuts locais dos trailers oficiais da Rockstar.
   4. Voz oficial `pt-BR-AntonioNeural` acelerada em +14% para maximizar retenção.
   5. Ducking de áudio obrigatório para que a narração nunca concorra com a trilha de fundo.
@@ -186,9 +186,9 @@ A lógica central reside no diretório [app/](file:///d:/CriadorDeVideos/app). A
 - Verifica os seguintes parâmetros:
   - Existência e integridade física do arquivo MP4;
   - Resolução exata de 1080×1920;
-  - Duração total $\le 58,5$ segundos;
+  - Duração total $\le 58,0$ segundos;
   - Presença de streams H.264 e AAC;
-  - Medição de Loudness Integrado (EBU R128), exigindo valores entre $-24,0$ e $-14,0$ LUFS e True Peak $< +0,2$ dBFS;
+  - Medição de Loudness Integrado (EBU R128), com alvo calibrado em $-14,0$ LUFS e True Peak $\le -1,0$ dBTP (o código legado reprova $< -28,0$ e alerta se $> +0,2$ dBFS; padronizado em C-13);
   - Geração de prancha de contato visual (`contact_sheet.png`) com 10 frames distribuídos e envelope de forma de onda do áudio (RMS).
 
 ### `app/web_server.py`

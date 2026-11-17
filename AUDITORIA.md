@@ -1,7 +1,15 @@
 # AUDITORIA TÉCNICA DO PROJETO — GTA 6 SHORTS STUDIO
 **Data:** 16 de Novembro de 2026  
 **Repositório:** `D:\CriadorDeVideos`  
-**Escopo:** Etapa 0 — Auditoria profunda de código (sem alterações de código na aplicação)
+**Escopo:** Etapa 0 — Auditoria profunda de código (Histórica)
+
+> ⚠️ **NOTA DE STATUS (DOCUMENTO HISTÓRICO):**  
+> Este relatório registra o diagnóstico inicial da Etapa 0. As tarefas subsequentes corrigiram ou esclareceram diversos pontos técnicos aqui levantados:  
+> 1. **Escrita Atômica:** Já implementada no `web_server.py` e `cli.py` utilizando gravação em arquivo temporário (`.tmp`), substituição atômica (`replace`) e backup automático da versão anterior (`project.json.bak`).  
+> 2. **Ducking e Loudnorm:** O `audio_processor.py` já emprega filtro `loudnorm=I=-14:TP=-1.5:LRA=11`, limitador de pico `alimiter=limit=0.95` e envelope temporal de atenuação (0.16 → 0.52). A evolução planejada (M-06) é a adição de `sidechaincompress`.  
+> 3. **Ken Burns:** O número de quadros (`n_frames`) é calculado pela duração real da cena e o trecho é delimitado por `-t`; o valor `d=99999` é uma ineficiência de processamento do FFmpeg, e não uma dessincronia de áudio/vídeo.  
+> 4. **Parser RSS:** O radar utiliza `xml.etree.ElementTree` da biblioteca padrão do Python, não dependendo de BeautifulSoup no fluxo ativo.  
+> Para a documentação arquitetural consolidada e atualizada, consulte [DOCUMENTACAO_COMPLETA_GTA6_SHORTS.md](DOCUMENTACAO_COMPLETA_GTA6_SHORTS.md).
 
 ---
 

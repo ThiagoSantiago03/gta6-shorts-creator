@@ -1,76 +1,94 @@
-# Guia do Agente Diretor — História da Música Studio v2 (Zero-API First)
+# Guia do Agente Diretor — GTA 6 Shorts Studio
 
-Este repositório segue a arquitetura **Agent-First + Zero-API** consolidada a partir de `OpenMontage`, `openfilm`, `HyperFrames`, `video-use`, `FireRed-OpenStoryline` e `ViMax`.
-
-Quando o usuário pedir um novo combo para Instagram Reels & Destaques, **não gaste créditos de API do Gemini por padrão** — você (o Agente) atua como pesquisador, roteirista, editor e verificador de QA usando o código local e fontes públicas gratuitas.
-
----
-
-## Fluxo Padrão de Direção (0 Chamadas de LLM Externa)
-
-### Passo 1 — Coletar Dossiê Histórico Gratuito
-Rode:
-```powershell
-d:\CriadorDeVideos\.venv\Scripts\python.exe cli.py research --song "Mother" --artist "Danzig" -o projects\dossier.json
-```
-O módulo `app/music_researcher.py` consulta **Wikipedia PT, Wikipedia EN, MusicBrainz, iTunes Search e LRCLIB (`app/lyrics_engine.py`)** sem chave de API, resolvendo ano exato, álbum, produtor, marcos em paradas/MTV, citações de entrevista (`quote_pt`) e timestamps LRC reais da letra cantada.
-
-### Passo 2 — Roteirizar com `shot_intent`, Gancho pela Letra e Curadoria Multimídia
-Escreva ou gere `projects/<id>/project.json` (ou crie um `script.json` para passar via `--script-json` ou `POST /api/projects/import-json`):
-- **Modo padrão (`video_mode="single_all_in_one"` + `opening_mode="lyric_hook"` + `overlay_style="clean_reels"`)**:
-  - Estrutura de **Gancho pela Letra & Alternância Inteligente**: **Abertura rápida (~0.2s) com fala-gancho que introduz o 1º verso** → **Respiro B1 saltando direto ao timestamp cantado real (`music_break_audio_start_sec`) com tradução PT-BR `LyricBreak` na tela** → **Fato histórico (com opção de `quote_text` em card editorial)** → **Respiros B2..B4 com versos contrastantes** → **Clímax Musical Final (~12s a partir de `finale_audio_start_sec` em volume cheio + clipes em movimento contínuo)**.
-  - Para usar a introdução instrumental clássica (`1.8s` antes da narração) e tarja fixa superior, use `opening_mode="music_intro"` (`--intro-sec 1.8`) e `overlay_style="banner_top"`.
-  - **5 cenas enxutas** (`hook_establish`, `context_origin`, `story_conflict`, `climax_reveal`, `legacy_cta`), definindo `music_break_after_sec` (padrão `3.2`s, ou janela LRC mesclada) + `music_break_audio_start_sec` + `music_break_lyric_en`/`pt` nas cenas 1 a 4 e `0.0` na cena 5 (seguida pelo Clímax Final). Pode-se também preencher `quote_text` numa cena com frase/citação histórica curta.
-  - Use `POST /api/projects/{id}/sync-lyrics` (ou um arquivo `.lrc` homônimo junto ao MP3/WAV) caso anexe uma versão editada/estendida da música para alinhar os timestamps LRC exatamente à duração do arquivo local. Use `GET /api/projects/{id}/audio-waveform` e `GET /api/projects/{id}/audio-stream` para inspeção de picos e recorte exato na UI.
-  - Opcionalmente preencha `band_video_clips` com clipes `.mp4`/`.mov` reais da banda tocando (ou atribua direto em qualquer cena via `scene.video_path` + `scene.video_start_sec` ou endpoint `POST /api/projects/{id}/select-scene-candidate/{scene_index}`); sem clipes externos, o sistema monta automaticamente galeria animada Wikipedia/Wikimedia (filtrada por entidade artística + relevância ao roteiro da cena) + palco HTML5 Canvas2D determinístico.
-  - Use `POST /api/projects/{id}/search-scene-candidates/{scene_index}` para buscar até 8–12 imagens candidatas reais alinhadas ao script da cena e capa oficial iTunes (`candidate_items`). Nota: sob `visual_engine="auto_free_media"`, B-roll Archive.org Prelinger automático só é ativado para músicas pré-1975 para evitar clipes fora de época em lançamentos 1975+.
-- **Modo alternativo (`video_mode="two_reels_combo"` — 2 Reels Separados)**:
-  - **6 cenas para o Reel 1 (~40–50s, 110–130 palavras em PT-BR)**: `hook_establish`, `context_origin`, `story_conflict`, `climax_reveal`, `legacy_resolution`, `cta_handoff`.
-- Inclua em cada cena:
-  - `search_query` (em inglês, curto, 2–4 palavras para Wikimedia Commons / Wikipedia PageImages)
-  - `video_query` (termos concisos de cena para B-roll público no Archive.org / Prelinger / classic_tv, ex.: `"rock concert crowd"`, `"recording studio"`, `"television news"`)
-  - `effect` variado entre `"zoom_in"`, `"zoom_out"`, `"pan_left"`, `"pan_right"`, `"ken_burns_duotone"`, `"vintage_grain"` (nunca repetir o mesmo efeito > 50% das cenas!)
-  - `highlight_words` (2–4 palavras-chave para destaque nas legendas)
-  - `quote_text` (opcional — frase curta em português para card editorial flutuante sem colidir com as legendas inferiores)
-
-### Passo 3 — Cenas Motion Graphics HTML Personalizadas (Opcional — Protocolo OpenFilm)
-Para uma abertura ou diagrama histórico sob medida em 1080×1920, crie um HTML em `projects/<id>/custom_scene_01.html` apontando `scene.html_path` para ele.
-Contrato obrigatório (**OpenFilm Spec** + **HyperFrames Motion Doctrine**):
-- `window.film = { width: 1080, height: 1920, duration, ready, frame(t) }`
-- Tudo que depende de tempo `t` ou de áudio precisa ser **função pura de `t`** (use dados pré-computados como `cumBass` carregados em `ready`; nunca acumule estado entre chamadas de `frame(t)`).
-- **Fundo opaco** sempre (`#07070c`), curva de entrada `easeOutQuart` / cúbica com rampa no trecho inicial, **zero oscilação idle em títulos**, e respeitar áreas seguras (não sobrepor `y < 140` nem `y > 1600`, pois as legendas `.ass` são queimadas por último pelo FFmpeg).
-
-### Passo 4 — Renderizar Vídeo Único (ou Combo) + QA Automático
-```powershell
-# Vídeo Único Integrado — Gancho pela Letra + Clean Reels (padrão, com opção --band-clip para clipes reais):
-d:\CriadorDeVideos\.venv\Scripts\python.exe cli.py create --song "Mother" --artist "Danzig" --audio "inputs\mother.mp3" --opening-mode lyric_hook --overlay-style clean_reels --intro-sec 0.2 --break-sec 3.2 --finale-sec 12 --project-id danzig-mother
-
-# Vídeo Único clássico (Intro musical 1.8s + Tarja superior fixa):
-d:\CriadorDeVideos\.venv\Scripts\python.exe cli.py create --song "Mother" --artist "Danzig" --audio "inputs\mother.mp3" --opening-mode music_intro --overlay-style banner_top --intro-sec 1.8 --break-sec 2.8 --project-id danzig-mother-classic
-
-# Combo clássico 2 Reels separados:
-d:\CriadorDeVideos\.venv\Scripts\python.exe cli.py create --song "Mother" --artist "Danzig" --audio "inputs\mother.mp3" --mode two_reels_combo --project-id danzig-mother-2x
-
-# A partir de um roteiro JSON personalizado ou re-render após editar project.json:
-d:\CriadorDeVideos\.venv\Scripts\python.exe cli.py create --song "Mother" --artist "Danzig" --audio "inputs\mother.mp3" --script-json script.json --project-id danzig-mother
-d:\CriadorDeVideos\.venv\Scripts\python.exe cli.py render-project --project-id danzig-mother
-```
-
-### Passo 5 — Verificação Obrigatória (Nunca pular!)
-1. Leia `projects/<id>/project_packed.md` e `projects/<id>/verify/qa_report.json` (ou rode `cli.py verify --project-id <id>`):
-   - Verifique `qa_passed: true`
-   - Confira `integrated_lufs` (próximo de `-14 LUFS`, sem `true_peak_dbfs > 0.2`)
-   - Confira `slideshow_risk.verdict` (`strong` ou `acceptable`, média `< 2.6`)
-2. **Inspecione visualmente com `read_file`**:
-   - Modo Vídeo Único: `outputs/<id>/contact_sheet_reel_completo.png` (10 quadros + onda sonora mostrando picos na Intro/Respiros/Clímax vs ducking suave na narração + marcadores `INT`/`B1..B4`/`FIN` + palavras faladas) e `outputs/<id>/capa_destaque.png`
-   - Modo 2 Reels: `outputs/<id>/contact_sheet_reel1.png`, `contact_sheet_reel2.png` e `capa_destaque.png`
-3. Se houver corte estranho, sobreposição de título com legenda ou erro visual, ajuste `project.json` ou o HTML e rode `cli.py render-project`.
+> Documento oficial de diretrizes e comandos para o agente de desenvolvimento e automação.
+> Foco: Produção autônoma e assistida de **YouTube Shorts sobre GTA 6 e Rockstar Games** (1080×1920 • $\le 58,0$ s • Sem API paga por padrão).
 
 ---
 
-## Regras Inegociáveis de Qualidade (`Hard Rules`)
+## 0. Regras Obrigatórias de Trabalho (Não Negociáveis)
 
-1. **Legendas sempre por último (`video-use` Hard Rule 1)**: nunca renderize legendas dentro do HTML por cena; o `app/video_renderer.py` queima o `.ass` global após `overlay` e `xfade` para garantir estilo uniforme, contraste e ausência de corte em transições.
-2. **Fade mínimo de 30 ms (`afade`) e Loudnorm (`-14 LUFS`)** em todos os muxes de áudio (`app/audio_processor.py`).
-3. **Sem `Mozilla/5.0` no User-Agent da Wikimedia** e sem `filetype:bitmap` nas queries (`WIKI_HEADERS` em `app/visual_assets.py`).
-4. **Encerramento limpo do navegador headless**: `app/html_renderer.py` cria `--user-data-dir` temporário por render e finaliza apenas o PID filho (`taskkill /F /T /PID`). Nunca finalize processos Chrome globais do usuário.
+1. **Uma tarefa por vez**: Não inicie a tarefa seguinte sem a anterior ter testes passando e estar validada.
+2. **Sem decisões arquiteturais unilaterais**: Se uma tarefa exigir mudar a estrutura de pastas, trocar bibliotecas ou alterar o modelo de dados de forma incompatível, pare e pergunte ao usuário.
+3. **Não reescreva do zero**: Preserve o comportamento atual (FastAPI + FFmpeg + SPA em JS puro + processamento local). Refatore em incrementos pequenos.
+4. **Teste de caracterização prévio**: Antes de alterar qualquer módulo, escreva ou rode um teste que fixe o comportamento atual.
+5. **O código é a fonte da verdade**: Não confie cegamente em documentações legadas. Verifique sempre a implementação real no código.
+6. **Nenhuma exceção engolida**: Todo `except` deve registrar log com contexto (`logging.warning/exception`); nunca use `except: pass`.
+7. **Compatibilidade Multiplataforma**: O projeto é testado em Windows e deve manter compatibilidade com Linux e macOS (caminhos com `Path`, sem barras invertidas fixas ou chamadas exclusivas de `.exe`).
+8. **Atualização contínua de documentação**: Ao concluir cada tarefa, atualize `DOCUMENTACAO_COMPLETA_GTA6_SHORTS.md` informando: arquivos alterados, testes adicionados e pendências/riscos.
+
+---
+
+## 1. Fluxo Operacional de Produção
+
+O pipeline de produção segue 5 etapas lineares e rastreáveis:
+
+```mermaid
+flowchart LR
+    A["1. Radar & Pauta<br>(gaming_radar.py)"] --> B["2. Roteiro Narrativo<br>(gaming_scriptwriter.py)"]
+    B --> C["3. Auto-Blend de Mídia<br>(gaming_media.py)"]
+    C --> D["4. Síntese TTS & Legendas<br>(tts_engine.py & subtitle_engine.py)"]
+    D --> E["5. Render FFmpeg & QA<br>(video_renderer.py & qa_verifier.py)"]
+```
+
+### Passo 1 — Radar e Pauta (`app/gaming_radar.py`)
+- Monitora tendências via Google Trends RSS (`geo=BR` e `geo=US`) e Google News.
+- Higieniza títulos e identifica matérias de games (Rockstar, GTA 6, Take-Two, vazamentos, trailers).
+- Classifica confiabilidade e descarta duplicatas antes da geração.
+
+### Passo 2 — Roteiro Narrativo (`app/gaming_scriptwriter.py`)
+- Gera a narrativa estruturada com gancho viral nos primeiros 3 segundos ($\le 24$ palavras).
+- Adapta a linguagem conforme a confiabilidade: fatos confirmados são afirmados; rumores exigem linguagem de incerteza ("segundo rumores", "supostamente").
+- Garante orçamento de palavras e ritmo compatível com o teto de **58,0 segundos**.
+
+### Passo 3 — Seleção de Mídia e Procedência (`app/gaming_media.py`)
+- Prioriza cortes em movimento dos trailers locais (`inputs/gta6/*.mp4`).
+- Consulta o catálogo [inputs/media_catalog.json](inputs/media_catalog.json) e registra a procedência e licença de cada corte e trilha sonora utilizada no projeto (`project.used_media`).
+- Seleciona trilha synthwave/rock local calculando o ponto de início ideal.
+
+### Passo 4 — Síntese Vocal e Legendas Dinâmicas (`app/tts_engine.py` & `app/subtitle_engine.py`)
+- Gera voz neural em português do Brasil (`pt-BR-AntonioNeural` a +14%) via Edge-TTS.
+- Extrai timestamps de início e fim por palavra (`WordTiming`).
+- Queima legendas ASS estilizadas estilo Vice City neon no terço inferior, respeitando a safe zone do YouTube Shorts.
+
+### Passo 5 — Renderização e Controle de Qualidade (`app/video_renderer.py` & `app/qa_verifier.py`)
+- Concatena clipes 1080×1920 (9:16) a 30 fps em H.264/AAC.
+- Aplica ducking de áudio (trilha atenuada sob a narração e cheia no clímax final).
+- Executa QA automatizado: ffprobe (resolução, duração $\le 58,0$ s), EBU R128 (loudness LUFS e True Peak) e auditoria de direitos de mídia.
+- Gera prancha de contato visual (`contact_sheet.png`) e resumo executivo (`project_packed.md`).
+
+---
+
+## 2. Comandos Reais da CLI (`cli.py`)
+
+A interface de linha de comando suporta estritamente os seguintes subcomandos:
+
+```bash
+# 1. Consultar pautas em alta no radar de GTA 6
+python cli.py radar --query "GTA 6" --geo "BR"
+
+# 2. Criar roteiro e montagem para um tópico específico
+python cli.py create --topic "Data de Lancamento de GTA 6" --archetype "auto"
+
+# 3. Criar e imediatamente renderizar o vídeo final
+python cli.py create --topic "Preco Oficial GTA 6" --render
+
+# 4. Renderizar um projeto existente pelo ID
+python cli.py render --project-id "gta6-preco-oficial-gta-6-1a2b3c"
+
+# 5. Listar todos os projetos cadastrados e status de renderização
+python cli.py list
+
+# 6. Criar lote de Shorts a partir das melhores pautas do dia
+python cli.py batch --count 5
+```
+
+---
+
+## 3. Estrutura de Diretórios Essenciais
+
+- `app/`: Módulos centrais da aplicação (servidor web, radar, roteirista, mídia, áudio, render e QA).
+- `inputs/`: Mídias brutas e catálogo de licenças (`media_catalog.json`).
+- `projects/`: Diretório de trabalho de cada projeto (`project.json`, áudios `.wav`, cortes e relatórios de QA).
+- `outputs/`: Vídeos finais renderizados (`single_video.mp4`) e capas (`thumbnail.png`).
+- `static/`: Interface Web SPA (HTML, CSS e JS puro com tema Vice City Neon).
+- `tests/`: Bateria de testes automatizados com `pytest`.

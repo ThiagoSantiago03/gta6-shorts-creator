@@ -1,11 +1,11 @@
 ---
 name: gta6-shorts-director
-description: Diretor completo de YouTube Shorts sobre GTA 6 e Rockstar Games em PT-BR (1080x1920 • <= 58s • Zero-API First). Use ao criar roteiros virais, montar fundos em movimento dos trailers locais, sincronizar overlays contextuais e renderizar vídeos finais no workspace CriadorDeVideos.
+description: Diretor completo de YouTube Shorts sobre GTA 6 e Rockstar Games em PT-BR (1080x1920 • <= 58,0s • Sem API paga por padrão). Use ao criar roteiros virais, montar fundos em movimento dos trailers locais, sincronizar overlays contextuais e renderizar vídeos finais no workspace CriadorDeVideos.
 ---
 
-# GTA 6 YouTube Shorts Director Skill (Zero-API First)
+# GTA 6 YouTube Shorts Director Skill (Sem API Paga por Padrão)
 
-Use esta skill para criar, gerenciar e auditar vídeos de **YouTube Shorts de GTA 6** de alta retenção no workspace `d:\CriadorDeVideos`.
+Use esta skill para criar, gerenciar e auditar vídeos de **YouTube Shorts de GTA 6** de alta retenção no workspace.
 
 ## Pilares de Direção
 1. **Fundo em Movimento Contínuo**:
@@ -19,22 +19,22 @@ Use esta skill para criar, gerenciar e auditar vídeos de **YouTube Shorts de GT
    - Resolução vertical **1080×1920 (9:16)** a 30fps.
    - Legendas estilizadas **Vice City** (amarelo/branco com contorno preto) posicionadas na safe-zone vertical (acima dos botões do Shorts).
    - Voz neural padronizada: **Antônio (`pt-BR-AntonioNeural`)** em ritmo viral (+14%).
-   - Trilha sonora de rock/trailer de ação com equalização suave (`ducking` durante a fala).
+   - Trilha sonora de rock/synthwave com ducking durante a fala.
 
 ## Comandos Principais
-```powershell
+```bash
 # Iniciar Painel Web
-run_panel.bat
+python -m uvicorn app.web_server:app --host 127.0.0.1 --port 8765
 
 # Radar de Notícias do Dia
-.venv\Scripts\python.exe cli.py radar
+python cli.py radar
 
 # Criar Novo Short
-.venv\Scripts\python.exe cli.py create --topic "<Manchete>" --angle "<Ângulo>"
+python cli.py create --topic "<Manchete>" --archetype "auto"
 
 # Criar Lote Autônomo Diário (5 Shorts)
-.venv\Scripts\python.exe cli.py batch --count 5
+python cli.py batch --count 5
 
 # Renderizar Vídeo
-.venv\Scripts\python.exe cli.py render --project-id <id>
+python cli.py render --project-id <id>
 ```
