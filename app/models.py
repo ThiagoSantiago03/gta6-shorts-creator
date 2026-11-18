@@ -192,6 +192,9 @@ class ShortsProject(BaseModel):
     qa_report: dict[str, Any] = Field(default_factory=dict)
     used_media: list[dict[str, Any]] = Field(default_factory=list)
     status: str = "draft"
+    human_approved: bool = False
+    human_approved_at: str | None = None
+    human_approval_notes: str = ""
     is_posted: bool = False
     posted_at: str | None = None
     posted_platform: str = "youtube"

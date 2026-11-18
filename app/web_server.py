@@ -880,6 +880,22 @@ def regenerate_gaming_project_script(project_id: str, body: RegenerateGamingScri
     return project.model_dump()
 
 
+class HumanApproveBody(BaseModel):
+    approved: bool = True
+    notes: str = ""
+
+
+@app.post("/api/projects/{project_id}/human-approve")
+def set_project_human_approval(project_id: str, body: HumanApproveBody = HumanApproveBody()) -> dict[str, Any]:
+    """T14.1: Registra aprovação humana explícita após revisão do QA/editorial."""
+    project = _load_project(project_id)
+    project.human_approved = bool(body.approved)
+    project.human_approved_at = datetime.now(timezone.utc).isoformat() if body.approved else None
+    project.human_approval_notes = (body.notes or "").strip()
+    _save_project(project)
+    return project.model_dump()
+
+
 class TogglePostedBody(BaseModel):
     is_posted: bool | None = None
     platform: str = "youtube"
@@ -891,6 +907,19 @@ class TogglePostedBody(BaseModel):
 def toggle_project_posted(project_id: str, body: TogglePostedBody = TogglePostedBody()) -> dict[str, Any]:
     project = _load_project(project_id)
     new_state = (not project.is_posted) if body.is_posted is None else bool(body.is_posted)
+    if new_state:
+        qa_rep = project.qa_report or {}
+        qa_ok = bool(qa_rep.get("qa_passed") or qa_rep.get("is_ready_for_publication"))
+        if not qa_ok:
+            raise HTTPException(
+                status_code=400,
+                detail="Vídeo ainda não aprovado no QA técnico/narrativo. Renderize e valide o QA antes de publicar.",
+            )
+        if not project.human_approved:
+            raise HTTPException(
+                status_code=400,
+                detail="Aprovação humana obrigatória antes de publicar. Revise o QA e clique em 'Aprovar para Publicação' primeiro.",
+            )
     project.is_posted = new_state
     if new_state:
         project.posted_at = datetime.now(timezone.utc).isoformat()

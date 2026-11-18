@@ -483,6 +483,13 @@
 
         <!-- STATUS DE PUBLICAÇÃO & CONTROLE DO CANAL -->
         <div id="publishStatusCard" class="card vice-card">
+          <div id="humanApprovalBar" style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; margin-bottom:14px; border-radius:8px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1);">
+            <div>
+              <span id="humanApprovalPill" class="mini-pill pending">🔒 Aguardando Revisão Humana</span>
+              <small id="humanApprovalVerdict" class="muted" style="display:block; margin-top:4px;">Verifique o QA e aprove manualmente antes de copiar o pacote ou marcar como postado.</small>
+            </div>
+            <button type="button" id="humanApproveBtn" class="btn btn-secondary btn-sm">☑️ Aprovar para Publicação</button>
+          </div>
           <div class="card-head">
             <div class="inline-pair" style="gap:12px; align-items:center;">
               <span id="publishStatusPill" class="mini-pill pending">⏳ Pendente de Postagem</span>

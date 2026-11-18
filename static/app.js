@@ -370,6 +370,38 @@ async function toggleProjectPosted(projectId, explicitState = null) {
   }
 }
 
+function isProjectPublishReady(proj) {
+  if (!proj) return { qaOk: false, humanOk: false, ready: false, verdict: "QA não executado" };
+  const qa = proj.qa_report || {};
+  const qaOk = Boolean(qa.qa_passed || qa.is_ready_for_publication);
+  const humanOk = Boolean(proj.human_approved);
+  const verdict = qa.verdict || (qaOk ? "Pronto" : "QA pendente/reprovado");
+  return { qaOk, humanOk, ready: qaOk && humanOk, verdict };
+}
+
+async function toggleHumanApproval(projectId) {
+  if (!CURRENT_PROJECT || CURRENT_PROJECT.id !== projectId) return;
+  const nextApproved = !Boolean(CURRENT_PROJECT.human_approved);
+  try {
+    const updated = await api(`/api/projects/${projectId}/human-approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved: nextApproved }),
+    });
+    CURRENT_PROJECT = updated;
+    renderPublishStatusCard();
+    await loadProjects();
+    showToast(
+      updated.human_approved
+        ? "Revisão humana aprovada! Pacote de publicação liberado."
+        : "Aprovação humana revogada.",
+      updated.human_approved ? "success" : "info"
+    );
+  } catch (err) {
+    showToast(`Erro ao atualizar aprovação humana: ${err.message}`, "error");
+  }
+}
+
 function renderPublishStatusCard() {
   const card = document.getElementById("publishStatusCard");
   const pill = document.getElementById("publishStatusPill");
@@ -377,8 +409,33 @@ function renderPublishStatusCard() {
   const btnIcon = document.getElementById("togglePostedBtnIcon");
   const btnText = document.getElementById("togglePostedBtnText");
   const panel = document.getElementById("publishDetailsPanel");
+  const approvalPill = document.getElementById("humanApprovalPill");
+  const approvalVerdict = document.getElementById("humanApprovalVerdict");
+  const approveBtn = document.getElementById("humanApproveBtn");
+  const copyYtBtn = document.getElementById("copyYoutubePackBtn");
+  const copyTtBtn = document.getElementById("copyTiktokCaptionBtn");
+  const togglePostedBtn = document.getElementById("togglePostedBtn");
 
   if (!card || !CURRENT_PROJECT) return;
+
+  const gate = isProjectPublishReady(CURRENT_PROJECT);
+  if (approvalPill) {
+    approvalPill.className = gate.humanOk ? "mini-pill posted" : "mini-pill pending";
+    approvalPill.textContent = gate.humanOk ? "✅ Revisão Humana Aprovada" : "🔒 Aguardando Revisão Humana";
+  }
+  if (approvalVerdict) {
+    approvalVerdict.textContent = `Veredito QA: ${gate.verdict}${!gate.ready ? " • Exige QA aprovado + revisão humana para publicar." : " • Liberado para publicação."}`;
+  }
+  if (approveBtn) {
+    approveBtn.textContent = gate.humanOk ? "↩️ Revogar Aprovação" : "☑️ Aprovar para Publicação";
+  }
+  if (copyYtBtn) copyYtBtn.disabled = !gate.ready;
+  if (copyTtBtn) copyTtBtn.disabled = !gate.ready;
+  if (togglePostedBtn && !CURRENT_PROJECT.is_posted) {
+    togglePostedBtn.disabled = !gate.ready;
+  } else if (togglePostedBtn) {
+    togglePostedBtn.disabled = false;
+  }
 
   if (CURRENT_PROJECT.is_posted) {
     card.classList.add("is-posted");
@@ -1479,9 +1536,22 @@ function setupStep4RenderHandlers() {
     regenThumbBtn.addEventListener("click", regenerateThumbnail);
   }
 
+  const humanApproveBtn = document.getElementById("humanApproveBtn");
+  if (humanApproveBtn) {
+    humanApproveBtn.addEventListener("click", async () => {
+      if (!CURRENT_PROJECT) return;
+      await toggleHumanApproval(CURRENT_PROJECT.id);
+    });
+  }
+
   const copyYtBtn = document.getElementById("copyYoutubePackBtn");
   if (copyYtBtn) {
     copyYtBtn.addEventListener("click", () => {
+      const gate = isProjectPublishReady(CURRENT_PROJECT);
+      if (!gate.ready) {
+        showToast("Aprovação do QA e revisão humana obrigatórias antes de copiar o pacote.", "warn");
+        return;
+      }
       const title = document.getElementById("editYoutubeTitle")?.value || "";
       const desc = document.getElementById("editYoutubeDescription")?.value || "";
       const tags = document.getElementById("editYoutubeTags")?.value || "";
@@ -1538,6 +1608,11 @@ function setupStep4RenderHandlers() {
   }
   if (copyTtBtn) {
     copyTtBtn.addEventListener("click", () => {
+      const gate = isProjectPublishReady(CURRENT_PROJECT);
+      if (!gate.ready) {
+        showToast("Aprovação do QA e revisão humana obrigatórias antes de copiar a legenda.", "warn");
+        return;
+      }
       const caption = document.getElementById("editTiktokCaption")?.value || "";
       navigator.clipboard.writeText(caption).then(() => {
         showToast("Legenda do TikTok copiada!", "success");
