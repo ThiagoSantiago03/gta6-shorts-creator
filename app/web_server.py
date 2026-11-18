@@ -38,6 +38,7 @@ from app.config import (
     get_ffmpeg_exe,
     get_gemini_api_key,
     get_image_model,
+    get_max_shorts_per_day,
     get_text_model,
     get_tts_model,
     save_gemini_api_key,
@@ -358,6 +359,7 @@ def get_config() -> dict[str, Any]:
         "gta6_inputs_dir": str(GTA6_INPUTS_DIR),
         "inputs_dir": str(INPUTS_DIR),
         "outputs_dir": str(OUTPUTS_DIR),
+        "max_shorts_per_day": get_max_shorts_per_day(),
     }
 
 
@@ -557,7 +559,9 @@ def create_batch_daily(req: BatchDailyRequest) -> dict[str, Any]:
     if not valid_items:
         raise HTTPException(status_code=404, detail="Nenhuma pauta com confiabilidade verificada encontrada para o lote.")
 
-    selected = valid_items[: max(1, min(req.count, 10))]
+    daily_limit = get_max_shorts_per_day()
+    effective_count = max(1, min(req.count, daily_limit))
+    selected = valid_items[:effective_count]
     created_projects = []
     failures = []
 
@@ -645,6 +649,7 @@ def create_batch_daily(req: BatchDailyRequest) -> dict[str, Any]:
     return {
         "ok": True,
         "count": len(created_projects),
+        "daily_limit": daily_limit,
         "failures_count": len(failures),
         "projects": created_projects,
         "failures": failures,
@@ -1905,6 +1910,8 @@ class CreateBatchJobsRequest(BaseModel):
 @app.post("/api/queue/jobs/batch")
 def create_batch_jobs_queue(req: CreateBatchJobsRequest) -> dict[str, Any]:
     from app.job_queue import JOB_MANAGER
+
+    daily_limit = get_max_shorts_per_day()
     items_to_enqueue: list[dict[str, Any]] = []
     if req.topics:
         for t in req.topics:
@@ -1921,7 +1928,7 @@ def create_batch_jobs_queue(req: CreateBatchJobsRequest) -> dict[str, Any]:
             if getattr(it, "status_confiabilidade", "") != "nao_verificado"
             and it.confidence not in ("Não verificado", "nao_verificado")
         ]
-        for it in valid_items[: max(1, min(req.count, 10))]:
+        for it in valid_items[: max(1, min(req.count, daily_limit))]:
             items_to_enqueue.append({
                 "title": it.title.strip(),
                 "suggested_angle": it.suggested_angle or "",
@@ -1936,10 +1943,15 @@ def create_batch_jobs_queue(req: CreateBatchJobsRequest) -> dict[str, Any]:
     if not items_to_enqueue:
         raise HTTPException(status_code=400, detail="Nenhuma pauta válida para enfileirar.")
 
+    truncated_by_limit = len(items_to_enqueue) > daily_limit
+    items_to_enqueue = items_to_enqueue[:daily_limit]
+
     jobs = JOB_MANAGER.create_batch(items_to_enqueue)
     return {
         "ok": True,
         "count": len(jobs),
+        "daily_limit": daily_limit,
+        "truncated_by_limit": truncated_by_limit,
         "jobs": [j.to_dict() for j in jobs],
     }
 

@@ -81,6 +81,16 @@ def get_default_edge_voice() -> str:
     return os.getenv("DEFAULT_EDGE_VOICE", "pt-BR-AntonioNeural").strip()
 
 
+def get_max_shorts_per_day() -> int:
+    """T14.2: Limite diário configurável para lotes automáticos (padrão seguro: 3)."""
+    raw = os.getenv("MAX_SHORTS_PER_DAY", "3").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning("MAX_SHORTS_PER_DAY inválido ('%s'); usando padrão 3.", raw)
+        return 3
+
+
 def get_ffmpeg_exe() -> str:
     system_ffmpeg = shutil.which("ffmpeg")
     if system_ffmpeg:

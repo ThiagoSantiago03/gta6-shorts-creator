@@ -745,17 +745,18 @@ async function submitCreateProject() {
 }
 
 async function handleBatchDailyAutomation() {
-  if (!confirm("Deseja disparar a automação diária autônoma para criar 5 YouTube Shorts a partir das notícias mais quentes de hoje?")) {
+  const dailyLimit = Number(CONFIG?.max_shorts_per_day || 3);
+  if (!confirm(`Deseja disparar o lote diário para criar até ${dailyLimit} YouTube Shorts a partir das notícias verificadas de hoje?`)) {
     return;
   }
   const intentSelect = document.getElementById("publishIntentSelect");
   const publishIntent = intentSelect?.value || "commercial";
-  showToast("Disparando automação autônoma de 5 Shorts...", "info");
+  showToast(`Disparando lote diário (até ${dailyLimit} Shorts)...`, "info");
   try {
     const res = await api("/api/automation/batch-daily", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ count: 5, query: "GTA 6", geo: "BR", publish_intent: publishIntent }),
+      body: JSON.stringify({ count: dailyLimit, query: "GTA 6", geo: "BR", publish_intent: publishIntent }),
     });
     showToast(`Automação concluída! ${res.count} vídeos gerados e roteirizados na fila.`, "success");
     await loadProjects();
