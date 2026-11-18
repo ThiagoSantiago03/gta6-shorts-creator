@@ -148,3 +148,43 @@ def test_regenerate_gaming_script_allows_switching_archetype(tmp_path, monkeypat
 
     assert updated2["viral_archetype"] == "curiosidade"
     assert len(updated2["scenes"]) == 5
+
+
+def test_4_archetypes_for_same_topic_produce_distinct_hooks_and_scene_orders():
+    """T14.3: Gerar 4 roteiros para a MESMA pauta nos 4 arquétipos deve produzir ganchos e ordens de cena distintos."""
+    from unittest.mock import patch
+
+    same_topic = "Rockstar revela detalhes do mapa de Vice City em GTA 6"
+    fake_dossier = {
+        "article_summary": "A Rockstar detalhou novos bairros, clima dinâmico e escala do mapa de Vice City.",
+        "article_facts": [
+            "O mapa de Leonida inclui pântanos, praias e áreas urbanas densas.",
+            "A engine RAGE traz simulação avançada de água e tráfego dinâmico.",
+            "Os desenvolvedores confirmaram exploração interna em dezenas de prédios.",
+            "A comunidade debate o tamanho final da instalação nos consoles atuais.",
+        ],
+    }
+
+    hooks: list[str] = []
+    scene_orders: list[tuple[str, ...]] = []
+    resolved_archetypes: list[str] = []
+
+    with patch("app.gaming_scriptwriter.fetch_gaming_topic_dossier", return_value=fake_dossier):
+        for arch in ("noticia", "curiosidade", "teoria_rumor", "polemica"):
+            res = generate_gaming_script(
+                topic_title=same_topic,
+                game_name="GTA 6",
+                fact_confidence="Notícia / Imprensa",
+                script_engine="offline_template",
+                viral_archetype=arch,
+            )
+            scenes = res["scenes"]
+            assert len(scenes) >= 4
+            hooks.append(scenes[0]["narration_text"].strip().lower())
+            scene_orders.append(tuple(s["title"] for s in scenes))
+            resolved_archetypes.append(res["viral_archetype"])
+
+    assert resolved_archetypes == ["noticia", "curiosidade", "teoria_rumor", "polemica_comparacao"]
+    assert len(set(hooks)) == 4, f"Ganchos repetidos entre os 4 arquétipos: {hooks}"
+    assert len(set(scene_orders)) == 4, f"Estruturas/ordens de cenas repetidas: {scene_orders}"
+

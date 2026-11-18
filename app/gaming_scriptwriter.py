@@ -38,8 +38,11 @@ def _pick_viral_archetype(
     requested: str = "auto",
     status_confiabilidade: str = "reportado",
 ) -> str:
-    if requested and requested != "auto" and requested in VIRAL_ARCHETYPES:
-        return requested
+    req_norm = (requested or "auto").strip().lower()
+    if req_norm == "polemica":
+        req_norm = "polemica_comparacao"
+    if req_norm and req_norm != "auto" and req_norm in VIRAL_ARCHETYPES:
+        return req_norm
 
     blob = f"{topic} {context}".lower()
 
@@ -253,46 +256,70 @@ def _sanitize_for_rumor(text: str) -> str:
 
 
 def _build_viral_hook(archetype: str, clean_topic: str, game_name: str, facts: list[str], is_rumor: bool = False) -> tuple[str, str]:
-    low = clean_topic.lower()
     fact_blob = f"{clean_topic} {' '.join(facts[:3])}".lower()
 
+    canon = (archetype or "noticia").strip().lower()
+    if canon in ("contraste_detalhe", "gameplay_imersao", "lista_open_loop"):
+        canon = "curiosidade"
+    elif canon == "polemica":
+        canon = "polemica_comparacao"
+    elif canon == "raio_x_numeros":
+        canon = "noticia"
+
+    # 1. Teoria / Rumor — abertura SEMPRE em formato de pergunta/hipótese condicional
+    if canon == "teoria_rumor" or is_rumor:
+        if any(w in fact_blob for w in ("mapa", "leonida", "vice city")):
+            return (
+                "RUMOR • MAPA",
+                f"Será que isso vai mesmo pro jogo final? Supostos detalhes do mapa de {game_name} vazaram e dividiram a comunidade!",
+            )
+        if any(w in fact_blob for w in ("custo", "orçamento", "bilhão", "bilhões", "caro", "preço")):
+            return (
+                "RUMOR • CUSTO",
+                f"Será que vai custar tudo isso? Circulam novos rumores sobre os supostos números de {game_name}!",
+            )
+        return (
+            f"TEORIA • {game_name.upper()}",
+            f"Será que faz sentido? Um rumor que ganhou força hoje sobre {clean_topic} está movimentando os fãs — se liga nos indícios!",
+        )
+
+    # 2. Descoberta / Curiosidade — abertura focada em detalhe oculto / evidência
+    if canon == "curiosidade":
+        if any(w in fact_blob for w in ("mapa", "leonida", "vice city")):
+            return (
+                f"DESCOBERTA • {game_name.upper()}",
+                f"Quase ninguém reparou nos segredos escondidos no mapa de {game_name} — e esse detalhe muda tudo!",
+            )
+        return (
+            f"CURIOSIDADE • {game_name.upper()}",
+            f"Você provavelmente deixou passar esse detalhe sobre {clean_topic} — olha o que a análise revelou!",
+        )
+
+    # 3. Polêmica / Comparação — abertura em formato de dilema / afirmação polarizadora
+    if canon == "polemica_comparacao":
+        if any(w in fact_blob for w in ("preço", "preco", "custo", "80 dólares", "caro", "orçamento")):
+            return (
+                f"POLÊMICA • {game_name.upper()}",
+                f"O debate sobre o preço e os custos de {game_name} rachou a comunidade ao meio — vale tudo isso ou passou do ponto?",
+            )
+        return (
+            f"POLÊMICA • {game_name.upper()}",
+            f"A discussão sobre {clean_topic} dividiu os fãs de {game_name} ao meio — e os dois lados têm argumentos fortes!",
+        )
+
+    # 4. Notícia Oficial (padrão) — abertura direta jornalística
     if any(w in fact_blob for w in ("custo", "orçamento", "bilhão", "bilhões", "caro", "gasto", "dinheiro")):
-        if is_rumor:
-            return f"RUMOR • CUSTO", f"Circulam novos rumores sobre os supostos custos de {game_name} — e os valores estão deixando todo mundo em choque!"
         return f"ORÇAMENTO • {game_name.upper()}", f"Vazaram os números da produção de {game_name} — e o custo total dessa história tá deixando todo mundo em choque!"
     if any(w in fact_blob for w in ("polícia", "policia", "k9", "cães", "perseguição", "tiro")):
-        if is_rumor:
-            return f"RUMOR • POLÍCIA", f"A polícia de {game_name} pode ser a mais perigosa de toda a franquia — se liga nos supostos vazamentos!"
         return f"POLÍCIA • {game_name.upper()}", f"A polícia de {game_name} vai ser a mais perigosa de toda a franquia — se liga no que os materiais indicam!"
     if any(w in fact_blob for w in ("data de lançamento", "versão para pc", "versão de pc", "adiamento", "adiado", "disco físico")):
-        if is_rumor:
-            return f"RUMOR • LANÇAMENTO", f"Novos boatos sobre o lançamento de {game_name} agitam as redes — se liga no que vazou!"
         return f"LANÇAMENTO • {game_name.upper()}", f"{game_name} tem novas movimentações de cronograma — e tem um detalhe tenso que você precisa saber agora!"
     if any(w in fact_blob for w in ("mapa", "leonida", "vice city", "tamanho do mapa", "locais")):
-        if is_rumor:
-            return f"RUMOR • MAPA", f"Supostos detalhes do mapa de {game_name} vazaram — e o tamanho desse mundo aberto pode ser colossal!"
         return f"MAPA • {game_name.upper()}", f"Novos detalhes do mapa colossal de {game_name} foram revelados — e o tamanho desse mundo aberto vai te impressionar!"
     if any(w in fact_blob for w in ("gráficos", "física", "60 fps", "ray tracing", "rage", "água")):
         return f"GRÁFICOS • {game_name.upper()}", f"A tecnologia gráfica e física de {game_name} está deixando desenvolvedores do mundo inteiro de boca aberta!"
 
-    if is_rumor:
-        badge = f"RUMOR • {game_name.upper()}"
-        hook = f"Um rumor que ganhou força hoje sobre {clean_topic} tá mexendo com a comunidade — se liga nos detalhes!"
-        return badge, hook
-
-    if archetype == "contraste_detalhe":
-        badge = f"ALERTA • {game_name.upper()}"
-        hook = f"Uma novidade pesada sobre {clean_topic} acabou de sair — só que tem um detalhe que quase ninguém percebeu!"
-        return badge, hook
-
-    if archetype == "raio_x_numeros":
-        num_hit = re.search(r"\b(R\$\s?\d+[\.,]?\d*|US\$\s?\d+[\.,]?\d*|\d+[\.,]?\d*\s?(?:GB|TB|FPS|horas|bilhões|milhões))\b", fact_blob, re.I)
-        num_tag = num_hit.group(1) if num_hit else ""
-        badge = f"RAIO-X • {num_tag.upper() or game_name.upper()}"
-        hook = f"Olha os números divulgados dessa novidade em {game_name}: a conta final vai surpreender todo mundo!"
-        return badge, hook
-
-    badge = f"REVELAÇÃO • {game_name.upper()}"
+    badge = f"NOTÍCIA • {game_name.upper()}"
     hook = f"Uma novidade sobre {clean_topic} acabou de sair hoje — e quem tá esperando o lançamento precisa ver isso!"
     return badge, hook
 
