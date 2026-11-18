@@ -135,3 +135,28 @@ def verify_ffmpeg_installation() -> dict[str, Any]:
         logger.error("Erro na verificação do FFmpeg em '%s': %s", exe, exc)
         raise RuntimeError(f"FFmpeg inválido ou não executável em '{exe}': {exc}") from exc
 
+
+def find_headless_browser() -> str | None:
+    """Localiza Chrome/Chromium/Edge localmente (Windows, Linux e macOS) para render HTML/thumbnail."""
+    candidates = [
+        # Windows
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        # macOS
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        # PATH (Windows/Linux/macOS)
+        shutil.which("google-chrome") or "",
+        shutil.which("chromium") or "",
+        shutil.which("chromium-browser") or "",
+        shutil.which("chrome") or "",
+        shutil.which("msedge") or "",
+    ]
+    for path in candidates:
+        if path and Path(path).exists():
+            return str(path)
+    return None
+
+

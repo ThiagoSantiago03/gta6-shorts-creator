@@ -58,7 +58,7 @@ O **GTA 6 Shorts Studio** é uma aplicação local em **FastAPI + FFmpeg + SPA e
 | `app/job_queue.py` | Fila FIFO persistente em `INPUTS_DIR / "jobs"` com recuperação pós-reinício e retomada por etapa. |
 | `app/web_server.py` | API REST FastAPI, middlewares de segurança (`TrustedHostMiddleware`, `Origin`) e servidor de arquivos estáticos. |
 
-> **Módulos legados (nicho anterior de História da Música):** `music_researcher.py`, `lyrics_engine.py`, `script_generator.py`, `html_renderer.py`, `motion_design.py`. Ainda importados por rotas antigas em `web_server.py`; isolamento planejado em T13.
+> **Módulos legados (nicho anterior de História da Música):** isolados em `app/legacy/` (`music_researcher.py`, `lyrics_engine.py`, `script_generator.py`, `html_renderer.py`, `motion_design.py`), mantidos com *shims* de re-exportação em `app/<modulo>.py` e rotas marcadas com `deprecated=True` no FastAPI. O fluxo principal de GTA 6 não importa nada de `app/legacy/` (garantido por `tests/test_legacy_isolation.py`). Remoção definitiva aguarda ciclo sem uso e aprovação do dono.
 
 ---
 

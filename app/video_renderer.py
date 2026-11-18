@@ -27,21 +27,13 @@ from app.audio_processor import (
 from app.config import (
     SAFE_ZONE_BOTTOM_PX,
     SAFE_ZONE_TOP_PX,
+    find_headless_browser,
     get_ffmpeg_exe,
     get_gemini_api_key,
 )
 from app.gaming_media import auto_select_gaming_soundtrack, prepare_gaming_project_visuals
 from app.gaming_scriptwriter import enforce_script_duration_budget
-from app.html_renderer import (
-    find_headless_browser,
-    generate_allinone_finale_html,
-    generate_music_break_html,
-    generate_reel1_hook_html,
-    generate_reel2_visualizer_html,
-    render_html_film_to_mp4,
-)
 from app.models import MusicStoryProject, SceneItem, WordTiming
-from app.motion_design import render_motion_overlay_mov
 from app.qa_verifier import run_project_qa
 from app.subtitle_engine import generate_ass_subtitles
 from app.thumbnail_engine import generate_project_thumbnail
@@ -51,6 +43,40 @@ from app.visual_assets import (
     generate_reel2_centerpiece,
     prepare_project_visuals,
 )
+
+
+def _legacy_html_renderer():
+    """Importação sob demanda do renderizador HTML legado (T13)."""
+    from app.legacy import html_renderer
+
+    return html_renderer
+
+
+def generate_allinone_finale_html(*args, **kwargs):
+    return _legacy_html_renderer().generate_allinone_finale_html(*args, **kwargs)
+
+
+def generate_music_break_html(*args, **kwargs):
+    return _legacy_html_renderer().generate_music_break_html(*args, **kwargs)
+
+
+def generate_reel1_hook_html(*args, **kwargs):
+    return _legacy_html_renderer().generate_reel1_hook_html(*args, **kwargs)
+
+
+def generate_reel2_visualizer_html(*args, **kwargs):
+    return _legacy_html_renderer().generate_reel2_visualizer_html(*args, **kwargs)
+
+
+def render_html_film_to_mp4(*args, **kwargs):
+    return _legacy_html_renderer().render_html_film_to_mp4(*args, **kwargs)
+
+
+def render_motion_overlay_mov(*args, **kwargs):
+    """Importação sob demanda do renderizador Motion Design legado (T13)."""
+    from app.legacy.motion_design import render_motion_overlay_mov as _fn
+
+    return _fn(*args, **kwargs)
 
 
 W, H = 1080, 1920

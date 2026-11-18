@@ -22,8 +22,7 @@ import numpy as np
 import websockets
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
-from app.config import get_ffmpeg_exe
-from app.html_renderer import find_headless_browser
+from app.config import find_headless_browser, get_ffmpeg_exe
 from app.models import MusicStoryProject
 
 

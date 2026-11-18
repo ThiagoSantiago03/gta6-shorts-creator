@@ -34,6 +34,7 @@ from app.config import (
     OUTPUTS_DIR,
     PROJECTS_DIR,
     STATIC_DIR,
+    find_headless_browser,
     get_ffmpeg_exe,
     get_gemini_api_key,
     get_image_model,
@@ -55,15 +56,12 @@ from app.gaming_media import (
 )
 from app.gaming_radar import fetch_daily_gaming_radar
 from app.gaming_scriptwriter import generate_gaming_script
-from app.html_renderer import find_headless_browser
-from app.lyrics_engine import fetch_synced_lyrics, select_lyric_break_cues
 from app.models import (
     AnalyzeShortsRequest,
     CreateProjectRequest,
     MusicStoryProject,
     SceneItem,
 )
-from app.script_generator import generate_story_script
 from app.shorts_analyzer import analyze_short_url
 from app.thumbnail_engine import THUMBNAIL_STYLES, generate_project_thumbnail
 from app.tts_engine import EDGE_VOICES_PT_BR, GEMINI_TTS_VOICES
@@ -753,6 +751,7 @@ def create_project(req: CreateProjectRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Informe o nome da música e do artista/banda.")
 
     pid = f"{_slugify(req.artist)}-{_slugify(req.song_title)}-{uuid.uuid4().hex[:6]}"
+    from app.legacy.script_generator import generate_story_script
     script_data = generate_story_script(
         song_title=req.song_title.strip(),
         artist=req.artist.strip(),
@@ -956,6 +955,8 @@ def _refresh_project_lyrics_sync(
     Query sibling .lrc sidecar or free LRCLIB (matched to `actual_duration` when audio is attached),
     populate `project.lyrics_cues` and align Break audio start cues + PT-BR lyric translations.
     """
+    from app.legacy.lyrics_engine import fetch_synced_lyrics, select_lyric_break_cues
+
     audio_p = Path(project.audio_file) if project.audio_file and Path(project.audio_file).exists() else None
     lyr_data = fetch_synced_lyrics(
         project.song_title,
@@ -996,7 +997,7 @@ def _refresh_project_lyrics_sync(
     return True, len(cues), source
 
 
-@app.post("/api/projects/{project_id}/sync-lyrics")
+@app.post("/api/projects/{project_id}/sync-lyrics", deprecated=True)
 def sync_project_lyrics(project_id: str) -> dict[str, Any]:
     project = _load_project(project_id)
     dur: float | None = None
@@ -1271,7 +1272,7 @@ def _redistribute_clips_for_gaming_project(project: MusicStoryProject, pdir: Pat
     auto_blend_gaming_clips_and_images(project, pdir, force_reassign=False)
 
 
-@app.post("/api/projects/{project_id}/upload-band-clip")
+@app.post("/api/projects/{project_id}/upload-band-clip", deprecated=True)
 async def upload_band_clip(project_id: str, file: UploadFile = File(...)) -> dict[str, Any]:
     project = _load_project(project_id)
     pdir = _project_dir(project_id)
@@ -1324,7 +1325,7 @@ def attach_input_video(project_id: str, body: AttachInputVideoBody) -> dict[str,
     return {"clip_path": c_str, "band_video_clips": project.band_video_clips, "project": project.model_dump()}
 
 
-@app.get("/api/projects/{project_id}/band-clips-info")
+@app.get("/api/projects/{project_id}/band-clips-info", deprecated=True)
 def get_band_clips_info(project_id: str) -> list[dict[str, Any]]:
     project = _load_project(project_id)
     items: list[dict[str, Any]] = []
@@ -1348,7 +1349,7 @@ def get_band_clips_info(project_id: str) -> list[dict[str, Any]]:
     return items
 
 
-@app.get("/api/projects/{project_id}/band-clip-thumb/{clip_idx}")
+@app.get("/api/projects/{project_id}/band-clip-thumb/{clip_idx}", deprecated=True)
 def get_band_clip_thumb(project_id: str, clip_idx: int) -> FileResponse:
     project = _load_project(project_id)
     if clip_idx < 0 or clip_idx >= len(project.band_video_clips):
@@ -1366,7 +1367,7 @@ def get_band_clip_thumb(project_id: str, clip_idx: int) -> FileResponse:
     return FileResponse(thumb_path, media_type="image/png")
 
 
-@app.post("/api/projects/{project_id}/remove-band-clip/{clip_idx}")
+@app.post("/api/projects/{project_id}/remove-band-clip/{clip_idx}", deprecated=True)
 def remove_band_clip(project_id: str, clip_idx: int) -> dict[str, Any]:
     project = _load_project(project_id)
     if clip_idx < 0 or clip_idx >= len(project.band_video_clips):
@@ -1388,7 +1389,7 @@ def remove_band_clip(project_id: str, clip_idx: int) -> dict[str, Any]:
     }
 
 
-@app.post("/api/projects/{project_id}/clear-band-clips")
+@app.post("/api/projects/{project_id}/clear-band-clips", deprecated=True)
 def clear_band_clips(project_id: str) -> dict[str, Any]:
     project = _load_project(project_id)
     project.band_video_clips = []
@@ -1703,7 +1704,7 @@ def enrich_ai_visuals_endpoint(
     }
 
 
-@app.post("/api/projects/{project_id}/upload-reel2-image")
+@app.post("/api/projects/{project_id}/upload-reel2-image", deprecated=True)
 async def upload_reel2_image(project_id: str, file: UploadFile = File(...)) -> dict[str, Any]:
     project = _load_project(project_id)
     pdir = _project_dir(project_id)
@@ -2017,7 +2018,7 @@ def get_rendered_scene_preview(project_id: str, scene_index: int) -> FileRespons
     return FileResponse(mp4, media_type="video/mp4")
 
 
-@app.get("/api/projects/{project_id}/reel2-preview")
+@app.get("/api/projects/{project_id}/reel2-preview", deprecated=True)
 def reel2_preview(project_id: str) -> FileResponse:
     pdir = _project_dir(project_id)
     img = pdir / "reel2_centerpiece.png"
